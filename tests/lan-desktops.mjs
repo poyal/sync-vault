@@ -15,7 +15,7 @@ import {
 const token = process.argv[2];
 if (
   !/^[a-z0-9-]{1,22}$/.test(token || "") ||
-  process.env.SYNC_VAULT_QA_PHYSICAL !== "1"
+  process.env.SYNC_VAULT_QA_PHYSICAL !== "1" || !process.env.SYNC_VAULT_QA_EXE
 )
   throw Error("named physical run required");
 const win = process.platform === "win32",

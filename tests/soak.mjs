@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 const run = promisify(execFile);
 const median = a => a.toSorted((x, y) => x - y)[Math.floor(a.length / 2)];
@@ -36,8 +37,21 @@ async function sampleTree(root) {
 export async function soak(d, peer, receive, base, token) {
   const file = path.resolve("artifacts/performance", token + "-" + process.platform + ".json");
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const report = { platform: process.platform, run: token, status: "RUNNING", samples: [], sent: [], recoveryMs: null };
+  const appState = await d.state();
+  const report = { platform: process.platform, arch: process.arch, os: os.release(),
+    appVersion: appState.version, product: appState.product, startedAt: new Date().toISOString(),
+    run: token, status: "RUNNING", samples: [], sent: [], recoveryMs: null };
   const root = d.app.process().pid;
+  await d.app.evaluate(({ BrowserWindow, app }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    globalThis.qaResidentEvents = [];
+    for (const event of ["show", "focus"])
+      win.on(event, () => globalThis.qaResidentEvents.push(event));
+    win.webContents.on("render-process-gone", (_e, details) => globalThis.qaResidentEvents.push(details.reason));
+    app.on("child-process-gone", (_e, details) => {
+      if (details.reason !== "clean-exit") globalThis.qaResidentEvents.push(details.reason);
+    });
+  });
   const send = async n => {
     const name = d.label + "-soak-" + n + ".txt";
     const f = path.join(base, name);
@@ -65,7 +79,11 @@ export async function soak(d, peer, receive, base, token) {
       if (i >= 60 && i < 120 && i % 6 === 0) await send(nextWork++);
       if (i === 120 && win) {
         await d.call("settings", { adapter: "SyncVaultQA-disconnected" });
-        assert.equal((await d.state()).local.address, "");
+        const offline = performance.now();
+        while ((await d.state()).local.address) {
+          assert.ok(performance.now() - offline < 5000, "adapter disconnect timeout");
+          await delay(100);
+        }
         interrupted = true;
       }
       if (i === 124 && win && interrupted) {
@@ -87,6 +105,8 @@ export async function soak(d, peer, receive, base, token) {
       if (i % 12 === 0) await fs.writeFile(file, JSON.stringify(report));
     }
     const state = await d.state();
+    report.events = await d.app.evaluate(() => globalThis.qaResidentEvents);
+    assert.deepEqual(report.events, [], "unrequested window show, focus, or crash");
     for (const name of report.sent) assert.ok(state.jobs.some(j => j.name === name && j.state === "완료"));
     const expected = win ? 18 : 19;
     for (let i = 0; i < expected; i++) {
