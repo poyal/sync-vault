@@ -223,7 +223,10 @@ export async function shareRequest(
 ): Promise<unknown> {
   validateEndpoint(endpoint);
   validateCertificate(cert);
-  return new Promise((resolve, reject) => {
+  const expires = Date.now() + (binary ? 120000 : 30000);
+  let retryHandshake = false;
+  const attempt = () => new Promise<unknown>((resolve, reject) => {
+    let connected = false;
     const request = https.request(
       {
         ...identity,
@@ -271,11 +274,22 @@ export async function shareRequest(
       request.destroy(new Error("기기 연결이 시간 초과되었습니다."));
     // Socket idle time alone lets a peer keep a request alive indefinitely by
     // trickling bytes. Bound the full TLS/connect/upload/response operation too.
-    const deadline = setTimeout(timeout, binary ? 120000 : 30000);
+    const deadline = setTimeout(timeout, Math.max(1, expires - Date.now()));
     deadline.unref();
     request.once("close", () => clearTimeout(deadline));
     request.setTimeout(30000, timeout);
-    request.on("error", reject);
+    request.once("socket", socket => socket.once("secureConnect", () => { connected = true; }));
+    request.once("error", (error: NodeJS.ErrnoException) => {
+      // Only this pre-handshake failure can be retried without replaying a POST.
+      retryHandshake = !connected && error.code === "EPROTO" && /UNSUPPORTED_PROTOCOL|unsupported protocol/i.test(error.message);
+      reject(error);
+    });
     request.end(body);
   });
+  try {
+    return await attempt();
+  } catch (error) {
+    if (!retryHandshake || signal?.aborted || Date.now() >= expires) throw error;
+    return attempt();
+  }
 }

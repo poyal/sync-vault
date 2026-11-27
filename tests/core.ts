@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import https from "node:https";
+import { EventEmitter } from "node:events";
 import { generateKeyPairSync, randomUUID, sign, createHash } from "node:crypto";
 import { createIdentity, fingerprint } from "../src/identity";
 import { Store, writable } from "../src/store";
@@ -26,6 +28,44 @@ const tmp = async (t: any) => {
   t.after(() => fs.rm(p, { recursive: true, force: true }));
   return p;
 };
+test("a TLS protocol error retries once before the handshake, with the same authenticated peer and no POST replay", async t => {
+  const client = await createIdentity(), server = await createIdentity();
+  let delivered = 0;
+  const listener = new ShareListener(server, [client.cert], false, async (req, res) => {
+    assert.deepEqual(await readJSON(req), { file: "QA" });
+    json(res, { delivered: ++delivered });
+  });
+  const endpoint = await listener.listen("127.0.0.1");
+  t.after(() => listener.close());
+  const original = https.request;
+  const request = () => shareRequest(client, endpoint, server.cert, "/qa", Buffer.from('{"file":"QA"}'));
+  let calls = 0, failures = 1, connected = false, code = "EPROTO";
+  t.mock.method(https, "request", (options, callback) => {
+    calls++;
+    assert.ok(options.rejectUnauthorized && options.minVersion === "TLSv1.3");
+    assert.deepEqual(options.ca, [server.cert]);
+    if (!failures--) return original(options, callback);
+    const req = Object.assign(new EventEmitter(), {
+      setTimeout() {},
+      end() {
+        const socket = new EventEmitter();
+        req.emit("socket", socket);
+        if (connected) socket.emit("secureConnect");
+        req.emit("error", Object.assign(new Error(code === "EPROTO" ? "UNSUPPORTED_PROTOCOL" : code), { code }));
+        req.emit("close");
+      },
+    });
+    return req;
+  });
+  assert.deepEqual(await request(), { delivered: 1 });
+  assert.equal(calls, 2);
+  for (const [afterHandshake, errorCode, expected] of [[false, "EPROTO", 2], [true, "EPROTO", 1], [false, "CERT_HAS_EXPIRED", 1]] as const) {
+    connected = afterHandshake; code = errorCode; failures = 2; calls = 0;
+    await assert.rejects(request(), { code });
+    assert.equal(calls, expected);
+  }
+  assert.equal(delivered, 1);
+});
 test("state survives restart, corruption uses the last complete backup", async (t) => {
   const root = await tmp(t);
   const a = new Store(root, root);
