@@ -1,16 +1,11 @@
-import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 contextBridge.exposeInMainWorld("vault", {
   call: (action: string, value?: unknown) =>
     ipcRenderer.invoke("vault", action, value),
-  drop: (files: File[]) =>
-    ipcRenderer.invoke(
-      "vault",
-      "drop",
-      files.map((f) => webUtils.getPathForFile(f)).filter(Boolean),
-    ),
   listen: (fn: () => void) => {
     ipcRenderer.on("vault:changed", fn);
   },
+  onPrivacy: (fn:(peer?:string)=>void) => {ipcRenderer.on("vault:privacy",(_event,peer)=>fn(peer));},
   onRequest: (fn: (link: { page: string; id: string }) => void) => {
     ipcRenderer.on("vault:request", (_event, link) => fn(link));
   },

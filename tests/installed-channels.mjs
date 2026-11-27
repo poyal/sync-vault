@@ -19,9 +19,12 @@ try {
   assert.equal(path.basename(devState.settings.receive), "Sync Vault Dev");
   assert.equal(devState.settings.paused, true);
   assert.equal(devState.settings.updates, false);
-  await dev.call("settings", { name: "Dev-only", updates: true, releaseFolder: dev.profile });
+  await dev.call("settings", { name: "Dev-only", updates: true });
   assert.equal((await dev.state()).settings.updates, false);
-  assert.equal((await dev.state()).settings.releaseFolder, "");
+  await dev.page.locator('aside [data-page="settings"]').click();
+  await dev.page.getByRole("button", { name: "앱 정보 · 업데이트" }).click();
+  await dev.page.locator("#dev-update").waitFor();
+  assert.equal(await dev.page.locator("#stable-update").isVisible(), false);
   await assert.rejects(dev.call("check"), /개발판/);
   if (process.argv.includes("--login-item")) {
     const registered = () => dev.app.evaluate(({ app }) => app.getLoginItemSettings(

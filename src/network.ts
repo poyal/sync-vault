@@ -257,9 +257,9 @@ export async function shareRequest(
           const limit =
             route === "/return/poll"
               ? 64 * 1024 ** 2
-              : route.startsWith("/release/")
-                ? 768 * 1024
-                : 32768;
+              : route === "/vault/clip" ? 46 * 1024 ** 2
+              : route.startsWith("/vault/") ? 8 * 1024 ** 2
+              : 32768;
           const value = await readJSON(response, limit);
           if (response.statusCode !== 200)
             throw new Error("상대 기기가 요청을 거절했습니다.");

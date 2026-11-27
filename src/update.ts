@@ -7,7 +7,7 @@ import { Readable, Transform } from "node:stream";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
-import type { PrivateReleases } from "./releases";
+import { assetBytes, assetStream, latestRelease } from "./github-release";
 const run = promisify(execFile);
 const ver = z
   .string()
@@ -42,22 +42,6 @@ export function compare(a: string, b: string) {
     y = ver.parse(b).split(".").map(Number);
   return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
 }
-async function response(url: URL, signal: AbortSignal) {
-  if (url.protocol !== "https:") throw Error("HTTPS 배포 주소가 필요합니다.");
-  const r = await fetch(url, { signal, redirect: "error" });
-  if (!r.ok || !r.body) throw Error("배포처 응답 " + r.status);
-  return r.body;
-}
-async function read(url: URL, limit: number, signal: AbortSignal) {
-  const blocks = [];
-  let size = 0;
-  for await (const b of await response(url, signal)) {
-    size += b.length;
-    if (size > limit) throw Error("배포 목록이 너무 큽니다.");
-    blocks.push(b);
-  }
-  return Buffer.concat(blocks);
-}
 export class Updater {
   status = "대기";
   notes = "";
@@ -67,14 +51,13 @@ export class Updater {
   private target?: z.infer<typeof asset>;
   private dir = "";
   private ctrl?: AbortController;
-  private source = "";
+  private downloadUrl = "";
+  get busy() { return this.ctrl !== undefined; }
   constructor(
     private home: string,
     private current: string,
-    private feed: string,
     private key: string,
     private changed: () => void,
-    private local?: PrivateReleases,
   ) {}
   async check() {
     if (this.ctrl || this.ready) return;
@@ -92,59 +75,32 @@ export class Updater {
         this.ctrl.signal,
         AbortSignal.timeout(15000),
       ]);
-      const indexes = (await this.local?.indexes()) ?? [];
-      if (this.feed) {
-        const base = new URL(this.feed);
-        const [manifest, sig] = await Promise.all([
-          read(new URL("update.json", base), 65536, signal),
-          read(new URL("update.sig", base), 64, signal),
-        ]);
-        indexes.push({ peer: "", manifest, sig });
-      }
+
       this.target = undefined;
+      this.downloadUrl = "";
       this.next = "";
       this.notes = "";
-      if (!indexes.length) {
-        this.status = "내 망의 배포 기기를 기다리고 있습니다.";
-        return;
-      }
-      const valid = indexes
-        .flatMap((i) => {
-          try {
-            return [
-              { peer: i.peer, m: verifyManifest(i.manifest, i.sig, this.key) },
-            ];
-          } catch {
-            return [];
-          }
-        })
-        .sort((a, b) => compare(b.m.version, a.m.version));
-      if (!valid.length) throw Error("신뢰할 수 있는 배포 서명이 없습니다.");
-      const selected =
-        valid.find(
-          (i) => i.m.platforms[process.platform + "-" + process.arch],
-        ) ?? valid[0];
-      const manifest = selected.m;
-      this.source = selected.peer;
-      if (compare(manifest.version, this.current) <= 0) {
+      const release = await latestRelease(signal);
+      this.next = release.version;
+      if (compare(release.version, this.current) <= 0) {
         this.status = "최신 버전입니다.";
         return;
       }
-      this.target = manifest.platforms[process.platform + "-" + process.arch];
-      this.next = manifest.version;
-      this.notes = manifest.notes;
-      if (
-        this.target &&
-        this.target.name !==
-          "SyncVault-" +
-            this.next +
-            "-" +
-            process.platform +
-            "-" +
-            process.arch +
-            ".zip"
-      )
-        throw Error("대상 패키지 이름이 다릅니다.");
+      const [manifest, signature] = await Promise.all([
+        assetBytes(release.asset("update.json"), 65536, signal),
+        assetBytes(release.asset("update.sig", 64), 64, signal),
+      ]);
+      const signed = verifyManifest(manifest, signature, this.key);
+      if (signed.version !== release.version) throw Error("GitHub 태그와 서명된 버전이 다릅니다.");
+      this.notes = signed.notes;
+      const platform = process.platform + "-" + process.arch;
+      const target = signed.platforms[platform];
+      if (target) {
+        if (target.name !== "SyncVault-" + release.version + "-" + platform + ".zip")
+          throw Error("대상 패키지 이름이 다릅니다.");
+        this.downloadUrl = release.asset(target.name, target.size);
+        this.target = target;
+      }
       this.status = this.target
         ? "다운로드 가능"
         : "이 OS의 업데이트가 아직 없습니다.";
@@ -164,32 +120,17 @@ export class Updater {
       throw Error("업데이트를 먼저 확인하세요.");
     const a = this.target;
     this.ctrl = new AbortController();
+    this.percent = 0;
     this.status = "다운로드 중";
     this.changed();
     this.dir = path.join(this.home, "updates", randomUUID());
-    await fs.mkdir(this.dir, { recursive: true, mode: 0o700 });
     try {
+      await fs.mkdir(this.dir, { recursive: true, mode: 0o700 });
       const hash = createHash("sha256");
       let bytes = 0;
       const self = this;
-      const signal = this.ctrl.signal,
-        local = this.local,
-        peer = this.source;
-      async function* chunks() {
-        for (let at = 0; at < a.size;) {
-          signal.throwIfAborted();
-          const b = await local!.part(peer, a.name, at, signal);
-          if (!b.length || b.length > a.size - at)
-            throw Error("패키지 조각 크기 불일치");
-          at += b.length;
-          yield b;
-        }
-      }
-      const source = peer
-        ? Readable.from(chunks())
-        : Readable.fromWeb(
-            (await response(new URL(a.name, this.feed), signal)) as any,
-          );
+      const signal = this.ctrl.signal;
+      const source = Readable.from(await assetStream(this.downloadUrl, signal));
       const measure = new Transform({
         transform(b, _e, cb) {
           bytes += b.length;
@@ -217,7 +158,7 @@ export class Updater {
       this.ready = true;
       this.status = "재시작하여 설치";
     } catch (e) {
-      this.status = "다운로드 중단 · " + (e as Error).message;
+      this.status = this.ctrl.signal.aborted ? "다운로드 취소됨" : "다운로드 중단 · " + (e as Error).message;
       await fs.rm(this.dir, { recursive: true, force: true });
     } finally {
       this.ctrl = undefined;

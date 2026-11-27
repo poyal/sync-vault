@@ -67,8 +67,8 @@ async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE, { desktopClipb
 const nav = (d, tab) =>
   d.page.getByRole("button", { name: tab, exact: true }).click();
 async function request(a, b) {
-  await nav(a, "기기");
-  await nav(b, "기기");
+  await a.page.locator('aside [data-page="devices"]').click();
+  await b.page.locator('aside [data-page="devices"]').click();
   await a.page
     .locator("#connect")
     .evaluate((el) => (el.parentElement.open = true));
@@ -80,6 +80,8 @@ async function request(a, b) {
 }
 async function approve(a, b) {
   await request(a, b);
+  if ((await a.state()).shelf)
+    await a.page.locator('[data-action="pair-confirm"]').click();
   await b.page.locator('[data-action="approve"]').click();
   await wait(async () =>
     (await a.state()).peers.some((p) => p.name === b.label && p.online),

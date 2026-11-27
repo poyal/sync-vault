@@ -27,6 +27,7 @@ async function main() {
     self = "1".repeat(64),
     peer = "2".repeat(64),
     sent: any[] = [];
+  store.state.settings.paused = false;
   let error = "";
   const clips = new Clips(
     path.resolve("out/native/clipboard.exe"),
@@ -151,10 +152,18 @@ async function main() {
     const rich = await paste();
     assert.equal(rich.text, "동시 복사 승자");
     assert.match(rich.html, /<b>동시 복사 승자<\/b>/);
-    await clips.receive(peer, {
+    const older = textClip(peer, "직접 고른 예전 한글 😀");
+    older.stamp.clock = 1;
+    await clips.copySelected(peer, older, () => {});
+    const selected = await paste();
+    assert.equal(selected.text, older.text);
+    assert.match(selected.html, /<b>직접 고른 예전 한글 😀<\/b>/);
+    await assert.rejects(clips.copySelected(peer, textClip(peer, "차단"), () => { throw Error("잠김"); }), /잠김/);
+    assert.equal((await paste()).text, older.text);
+    await clips.copySelected(peer, {
       ...fresh,
       stamp: { origin: peer, clock: clock + 1 },
-    });
+    }, () => {});
     const pastedImage = await paste();
     assert.deepEqual(
       nativeImage.createFromBuffer(Buffer.from(pastedImage.png)).toBitmap(),
@@ -186,6 +195,7 @@ async function main() {
         echoes: 0,
         pausedLockedPrivateExcluded: true,
         chromiumPaste: true,
+        manualOlderClipAndGuardedPaste: true,
         concurrentStampOrder: true,
         expiredCachePrunedWithActiveFilesRetained: true,
       }),

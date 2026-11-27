@@ -20,6 +20,10 @@ import { ReturnChannel } from "./return-channel";
 import { chunkSize } from "./files";
 import { service, wireVersion } from "./channel";
 const hello = z.object({
+  os: z.string().max(16).optional(),
+  locked: z.boolean().optional(),
+  accessSession: z.string().uuid().optional(),
+  accessSeq: z.number().int().nonnegative().optional(),
   name: z.string().min(1).max(60),
   port: z.number().int().min(1).max(65535),
   protocol: z.number().int(),
@@ -33,7 +37,9 @@ const hello = z.object({
     .optional(),
 });
 export function compatible(version: number, remote: string[]) {
-  return version === wireVersion ? features.filter((x) => remote.includes(x)) : [];
+  return version === wireVersion
+    ? features.filter((x) => remote.includes(x))
+    : [];
 }
 type Candidate = {
   id: string;
@@ -41,9 +47,9 @@ type Candidate = {
   endpoint: ShareEndpoint;
   seen: number;
 };
-export function compareCode(a: string, b: string) {
+export function compareCode(a: string, b: string, attempt = "") {
   return createHash("sha256")
-    .update([a, b].sort().join("|"))
+    .update([a, b].sort().concat(attempt).join("|"))
     .digest("hex")
     .slice(0, 16)
     .toUpperCase()
@@ -58,19 +64,33 @@ type Request = {
   expires: number;
   code: string;
   attempt?: string;
+  confirmed?: boolean;
+  os?: string;
 };
 export class Lan {
   id: string;
   nearby = new Map<string, Candidate>();
   online = new Map<
     string,
-    { time: number; features: string[]; version: string }
+    {
+      time: number;
+      features: string[];
+      version: string;
+      locked: boolean;
+      accessSession?: string;
+      accessSeq?: number;
+    }
   >();
   pending = new Map<string, Request>();
   private denied = new Map<string, Request>();
   diagnostics = "네트워크를 확인하고 있습니다.";
   address = "";
   port = 0;
+  private accessSession = randomUUID();
+  private accessSeq = 0;
+  onPeerLock?: (id: string) => void;
+  private accepted = new Map<string, { attempt: string; expires: number }>();
+  locked = false;
   pairPort = 0;
   private server?: ShareListener;
   private bootstrap?: ShareListener;
@@ -108,10 +128,12 @@ export class Lan {
   }
   publicInfo() {
     return {
+      os: process.platform,
+      ...this.access(),
       name: this.store.state.settings.name,
       port: this.port,
       protocol: wireVersion,
-      features: [...features, "return-channel"],
+      features: ["vault", "return-channel"],
       version: this.version,
       clock: Math.max(
         this.store.state.stamp.clock,
@@ -158,7 +180,12 @@ export class Lan {
       for (const [id, q] of this.nearby)
         if (Date.now() - q.seen > 120000) this.nearby.delete(id);
       for (const [id, q] of this.pending)
-        if (Date.now() > q.expires) this.pending.delete(id);
+        if (Date.now() > q.expires) {
+          this.deny(id);
+          q.expires = Date.now() + 300000;
+        }
+      for (const [id, q] of this.accepted)
+        if (q.expires < Date.now()) this.accepted.delete(id);
       for (const [id, q] of this.denied)
         if (Date.now() > q.expires) this.denied.delete(id);
       if (++this.tick % 40 === 0 || force) this.refreshBrowse?.();
@@ -190,7 +217,7 @@ export class Lan {
         if (req.url === "/return/reply") {
           json(
             res,
-            this.reverse.reply(remote.id, await readJSON(req, 1024 * 1024)),
+            this.reverse.reply(remote.id, await readJSON(req, 48 * 1024 ** 2)),
           );
           return;
         }
@@ -225,17 +252,30 @@ export class Lan {
         }
         if (req.url !== "/register") throw Error("등록 경로 오류");
         const info = hello
-          .extend({ attempt: z.string().uuid().optional() })
+          .extend({
+            attempt: z.string().uuid(),
+            confirmed: z.boolean().optional(),
+            cancel: z.boolean().optional(),
+          })
           .parse(await readJSON(req));
-        if (!compatible(info.protocol, info.features).length)
+        if (!compatible(info.protocol, info.features).includes("vault"))
           throw Error("호환되지 않는 버전");
         const endpoint = {
           address: req.socket.remoteAddress!,
           port: info.port,
         };
         validateEndpoint(endpoint);
-        if (this.store.state.peers.some((p) => p.id === remote.id)) {
+        if (
+          this.accepted.get(remote.id)?.attempt === info.attempt &&
+          this.store.state.peers.some((p) => p.id === remote.id)
+        ) {
           json(res, { status: "approved" });
+          return;
+        }
+        if (info.cancel) {
+          if (this.pending.get(remote.id)?.attempt === info.attempt)
+            this.deny(remote.id);
+          json(res, { status: "denied" });
           return;
         }
         const denied = this.denied.get(remote.id);
@@ -256,13 +296,28 @@ export class Lan {
             ...remote,
             attempt: info.attempt,
             name: info.name,
+            os: info.os,
             endpoint,
             expires: Date.now() + 300000,
-            code: compareCode(this.id, remote.id),
+            code: compareCode(this.id, remote.id, info.attempt),
           });
           this.changed();
         }
-        json(res, { status: "pending" });
+        const reqPair = this.pending.get(remote.id)!;
+        if (
+          reqPair.expires > Date.now() &&
+          reqPair.confirmed &&
+          info.confirmed
+        ) {
+          this.trust(reqPair);
+          this.accepted.set(remote.id, {
+            attempt: info.attempt,
+            expires: reqPair.expires,
+          });
+          this.pending.delete(remote.id);
+          this.changed();
+          json(res, { status: "approved" });
+        } else json(res, { status: "pending" });
       },
     );
     this.address = address;
@@ -371,6 +426,44 @@ export class Lan {
       this.diagnostics = "자동 검색 실패. 직접 연결 주소를 사용하세요.";
     }
   }
+  access(locked?: boolean) {
+    if (locked !== undefined && locked !== this.locked) {
+      this.locked = locked;
+      this.accessSeq++;
+    }
+    return {
+      locked: this.locked,
+      accessSession: this.accessSession,
+      accessSeq: this.accessSeq,
+    };
+  }
+  updateAccess(
+    id: string,
+    info: { locked?: boolean; accessSession?: string; accessSeq?: number },
+    hello = false,
+  ) {
+    const remote = this.online.get(id);
+    if (!remote) return;
+    if (
+      remote.accessSession === info.accessSession &&
+      (remote.accessSeq ?? 0) > (info.accessSeq ?? 0)
+    )
+      return;
+    if (
+      !hello &&
+      remote.accessSession &&
+      remote.accessSession !== info.accessSession
+    )
+      return;
+    const locked = !!info.locked,
+      transition = locked && !remote.locked;
+    Object.assign(remote, {
+      locked,
+      accessSession: info.accessSession,
+      accessSeq: info.accessSeq,
+    });
+    if (transition) this.onPeerLock?.(id);
+  }
   private record(id: string, info: z.infer<typeof hello>, address: string) {
     const p = this.store.state.peers.find((p) => p.id === id);
     if (!p) return;
@@ -382,14 +475,23 @@ export class Lan {
       p.endpoint.address !== address ||
       p.endpoint.port !== info.port ||
       p.name !== info.name ||
+      p.os !== info.os ||
       Date.now() - p.seen > 60000;
     this.online.set(id, {
+      ...this.online.get(id),
       time: Date.now(),
       features: compatible(info.protocol, info.features),
       version: info.version,
+      locked: this.online.get(id)?.locked ?? false,
     });
+    this.updateAccess(id, info, true);
     if (changed) {
-      Object.assign(p, { endpoint, name: info.name, seen: Date.now() });
+      Object.assign(p, {
+        endpoint,
+        name: info.name,
+        os: info.os,
+        seen: Date.now(),
+      });
       this.store.save();
     }
     this.changed();
@@ -527,37 +629,67 @@ export class Lan {
         Buffer.from("{}"),
       ),
     );
-    if (!compatible(info.protocol, info.features).length)
+    if (!compatible(info.protocol, info.features).includes("vault"))
       throw Error("상대 앱을 업데이트하세요.");
+    const attempt = randomUUID();
     return {
       ...remote,
+      attempt,
       endpoint: { address: endpoint.address, port: info.port },
       name: info.name,
-      code: compareCode(this.id, remote.id),
+      os: info.os,
+      code: compareCode(this.id, remote.id, attempt),
       expires: Date.now() + 300000,
     };
   }
-  async register(endpoint: ShareEndpoint, req: Request, signal: AbortSignal) {
-    const attempt = randomUUID();
-    for (let i = 0; i < 100 && Date.now() < req.expires; i++) {
-      signal.throwIfAborted();
-      const r: any = await shareRequest(
-        this.keys,
-        endpoint,
-        req.cert,
-        "/register",
-        Buffer.from(JSON.stringify({ ...this.publicInfo(), attempt })),
-        signal,
-      );
-      if (r.status === "denied")
-        throw Error("상대 기기가 등록 요청을 거절했습니다.");
-      if (r.status === "approved") {
-        this.trust(req);
-        return;
+  async register(
+    endpoint: ShareEndpoint,
+    req: Request,
+    signal: AbortSignal,
+    confirmed = () => true,
+  ) {
+    const attempt = req.attempt;
+    try {
+      while (Date.now() < req.expires) {
+        signal.throwIfAborted();
+        const r: any = await shareRequest(
+          this.keys,
+          endpoint,
+          req.cert,
+          "/register",
+          Buffer.from(
+            JSON.stringify({
+              ...this.publicInfo(),
+              attempt,
+              confirmed: confirmed(),
+            }),
+          ),
+          signal,
+        );
+        if (r.status === "denied")
+          throw Error("상대 기기가 등록 요청을 거절했습니다.");
+        if (r.status === "approved") {
+          signal.throwIfAborted();
+          if (!confirmed()) throw Error("양쪽 화면에서 코드를 확인하세요.");
+          this.trust(req);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 500));
       }
-      await new Promise((r) => setTimeout(r, 1800));
+      throw Error("등록 요청이 만료되었습니다.");
+    } finally {
+      if (signal.aborted)
+        await shareRequest(
+          this.keys,
+          endpoint,
+          req.cert,
+          "/register",
+          Buffer.from(
+            JSON.stringify({ ...this.publicInfo(), attempt, cancel: true }),
+          ),
+          AbortSignal.timeout(2500),
+        ).catch(() => {});
     }
-    throw Error("등록 요청이 만료되었습니다.");
   }
   deny(id: string) {
     const req = this.pending.get(id);
@@ -571,8 +703,8 @@ export class Lan {
   approve(id: string) {
     const req = this.pending.get(id);
     if (!req || req.expires < Date.now()) throw Error("만료된 요청입니다.");
-    this.trust(req);
-    this.pending.delete(id);
+    req.confirmed = true;
+    this.changed();
   }
   private trust(req: Request) {
     if (!this.store.state.peers.some((p) => p.id === req.id))
@@ -580,6 +712,7 @@ export class Lan {
         id: req.id,
         cert: req.cert,
         name: req.name,
+        os: req.os,
         endpoint: req.endpoint,
         autoAccept: false,
         seen: Date.now(),
@@ -594,6 +727,7 @@ export class Lan {
     void this.probe(p);
   }
   forget(id: string) {
+    this.accepted.delete(id);
     this.reverse.forget(id);
     this.polling.get(id)?.abort();
     this.direct.delete(id);

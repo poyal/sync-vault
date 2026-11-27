@@ -1,4 +1,18 @@
-# 상주·전송 성능 시험
+# 공유 공간 성능 시험
+
+`0.2.x-dev`는 등록된 기기에서 사용자가 선택한 기록이나 파일을 가져오는 시간을 측정합니다. Windows에서 실행하고, 같은 LAN의 Mac을 사용하려면 [실기기 실행 환경](e2e.md)을 설정합니다. 시험마다 `SYNC_VAULT_QA_REPORT`를 다른 폴더로 지정합니다.
+
+| 명령 | 부하 | 합격 기준 |
+| --- | --- | --- |
+| `npm run test:perf` | 방향별로 최근 기록 10건과 1,000개 파일 중 첫 페이지 60건을 각각 20회 요청 | 각 방향과 목록별 p95 ≤ 1초, 응답 건수 일치 |
+| `npm run test:perf -- --large` | 원본 파일 5 GiB, 절반에 도달하면 원본 앱 재시작. 로컬 시험은 여유 11 GiB 이상 필요. 실기기에서 `--large --reverse`를 쓰면 Mac에서 Windows로 가져옵니다 | 같은 작업이 이어져 완료되고 양쪽 디스크에서 별도로 읽은 SHA-256 일치 |
+| `npm run test:perf -- --soak` | 페어링한 두 앱의 창을 숨기고 20분 동안 5초 간격으로 관찰 | 모든 표본에서 창 숨김, OS별 평균 CPU ≤ 2%, 메모리 증가 ≤ 32 MiB |
+
+목록 지연은 제어기에서 요청한 시점부터 응답을 읽은 시점까지이며 화면을 그리는 시간은 별도로 측정하지 않습니다. 20분 시험은 네이티브 클립보드 감시기를 포함한 앱 프로세스 트리를 읽습니다. CPU는 논리 코어 하나를 100%로 계산합니다. Windows 작업 집합과 Mac RSS는 첫 1분과 마지막 1분의 중앙값 차이로 비교합니다. 결과는 `results.json`에, 진행 중 원시 표본은 `resident-progress.json`에 기록됩니다.
+
+## 0.1.x 자동 전송 방식의 기존 측정
+
+아래 절차와 기준은 자동 전송을 지원하는 두 보관 버전의 비교에 사용합니다.
 
 동일한 Windows와 Mac, LAN, 전원 상태에서 0.1.1과 후보를 측정합니다. 설치 파일의 커밋·SHA-256, OS 버전, 유선/Wi-Fi, 원시 JSON을 한 실행 ID로 연결합니다. 비교 측정 중에는 두 기기에서 다른 벤치마크나 패키징을 실행하지 않습니다.
 
@@ -10,13 +24,13 @@ Windows를 제어기로 사용합니다. 두 기기에는 동일한 시험 스�
 {
   "macHost": "mac-mini-m4",
   "macNode": "/absolute/path/to/node",
-  "macWorkdir": "/absolute/path/to/test-checkout",
-  "baseline": {"win": "C:/QA/baseline/Sync Vault.exe", "mac": "/baseline/Sync Vault.app/Contents/MacOS/Sync Vault"},
-  "candidate": {"win": "C:/QA/candidate/Sync Vault Dev.exe", "mac": "/candidate/Sync Vault Dev.app/Contents/MacOS/Sync Vault Dev"}
+  "macWorkdir": "/Users/<user>/Workspace/personal/sync-vault",
+  "baseline": {"win": "C:/QA/baseline/Sync Vault.exe", "mac": "/Users/<user>/Workspace/personal/sync-vault/artifacts/<run>/baseline/Sync Vault.app/Contents/MacOS/Sync Vault"},
+  "candidate": {"win": "C:/QA/candidate/Sync Vault Dev.exe", "mac": "/Users/<user>/Workspace/personal/sync-vault/artifacts/<run>/candidate/Sync Vault Dev.app/Contents/MacOS/Sync Vault Dev"}
 }
 ```
 
-`npm run test:perf -- artifacts/bench.json --files-only`는 개인 클립보드 접근 없이 발견·파일 처리량을 비교합니다. `--desktop`은 **두 전용 로그인 세션의 시스템 클립보드를 실제로 교체**하며 독립된 편집기 프로세스 두 개를 실행합니다. 정상 운용 중인 사용자 세션에는 파일 전용 모드를 사용합니다.
+`npm run test:perf:legacy -- artifacts/bench.json --files-only`는 개인 클립보드 접근 없이 발견·파일 처리량을 비교합니다. `--desktop`은 **두 전용 로그인 세션의 시스템 클립보드를 실제로 교체**하며 독립된 편집기 프로세스 두 개를 실행합니다. 정상 운용 중인 사용자 세션에는 파일 전용 모드를 사용합니다.
 
 기본 실행 순서는 기준판, 후보 순입니다. 순서에 따른 변동을 조사할 때는 같은 명령 끝에 `--candidate-first`를 붙입니다. 각 실행의 방향별 원시값과 판정을 함께 보관합니다.
 
@@ -32,6 +46,6 @@ Windows 수신 방화벽 규칙은 실행 파일 경로마다 다를 수 있습�
 
 ## 20분 상주
 
-양쪽에서 `npm run test:e2e:desktop -- <같은-ID> --soak`를 실행합니다. 실제 LAN 등록과 양방향 자동 파일 수신을 확인한 뒤 창을 숨긴 상태로 5분 유휴, 5분 양방향 공유, 5분 단절·복구와 공유, 5분 유휴를 수행합니다. 단절은 Windows 시험 앱에서 선택 어댑터를 일시 변경해 유도합니다. 물리 Wi-Fi·절전은 별도 실기기 항목입니다.
+기존 자동 수신 시험기를 쓰는 버전의 양쪽 체크아웃에서 `npm run test:e2e:desktop -- <같은-ID> --soak`를 실행합니다. 실제 LAN 등록과 양방향 자동 파일 수신을 확인한 뒤 창을 숨긴 상태로 5분 유휴, 5분 양방향 공유, 5분 단절·복구와 공유, 5분 유휴를 수행합니다. 단절은 Windows 시험 앱에서 선택 어댑터를 일시 변경해 유도합니다. 물리 Wi-Fi·절전은 별도 실기기 항목입니다.
 
 5초 간격으로 Windows는 프로세스 트리의 working set·누적 CPU·핸들을, Mac은 RSS·누적 CPU를 읽습니다. CPU는 논리 코어 하나가 100%이며 유휴 평균 2% 이하가 기준입니다. 첫·마지막 유휴 구간 끝 1분의 메모리 중앙값 차이는 32MiB 이하, 네트워크 복원부터 첫 전송 완료까지 15초 이하입니다. 창 표시 및 프로세스 종료, 전달 파일 누락·내용 불일치는 실패입니다. 각 OS 결과는 `artifacts/performance/<ID>-<OS>.json`에 기록됩니다.

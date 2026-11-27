@@ -16,7 +16,7 @@ import {
 import { stampSchema } from "./content";
 export const chunkSize = 4 * 1024 ** 2;
 const maxEntries = 8000;
-const safeName = (s: string) =>
+export const safeName = (s: string) =>
   s.length > 0 &&
   s.length <= 180 &&
   !/[<>:"\\|?*\u0000-\u001f]/.test(s) &&
@@ -58,27 +58,31 @@ export function validateOffer(raw: unknown): Offer {
   }
   return offer;
 }
-export async function digest(file: string) {
+export async function digest(file: string, check?: (file: string) => Promise<void>) {
   const h = createHash("sha256");
-  for await (const b of createReadStream(file)) h.update(b);
+  for await (const b of createReadStream(file, { highWaterMark: 1024 * 1024 })) {
+    if (check) await check(file);
+    h.update(b);
+  }
   return h.digest("hex");
 }
 function numberedName(name: string, directory: boolean, number: number) {
   const ext = directory ? "" : path.extname(name);
   return name.slice(0, name.length - ext.length) + " (" + number + ")" + ext;
 }
-export async function inventory(paths: string[]): Promise<Source[]> {
+export async function inventory(paths: string[], check?: (file: string) => Promise<void>): Promise<Source[]> {
   const entries: Source[] = [];
   async function add(source: string, name: string) {
     if (entries.length >= maxEntries)
       throw Error("한 작업에는 8,000개까지 넣을 수 있습니다.");
+    if (check) await check(source);
     const s = await fs.lstat(source);
     if (s.isSymbolicLink() || (!s.isDirectory() && !s.isFile()))
       throw Error("로컬 일반 파일과 폴더만 보낼 수 있습니다.");
     if (!safeName(path.basename(source)))
       throw Error("상대 OS에서 사용할 수 없는 파일명입니다.");
     const dir = s.isDirectory(),
-      hash = dir ? "" : await digest(source);
+      hash = dir ? "" : await digest(source, check);
     const after = await fs.lstat(source);
     if (
       after.size !== s.size ||
@@ -93,6 +97,7 @@ export async function inventory(paths: string[]): Promise<Source[]> {
       hash,
       size: dir ? 0 : s.size,
       modified: s.mtimeMs,
+      ...(check ? {inode:s.ino,device:s.dev} : {}),
     });
     if (dir)
       for (const child of (await fs.readdir(source)).sort())
@@ -210,6 +215,23 @@ export async function transmit(
   await call("/finish", { id: job.id });
   return "complete";
 }
+async function unchangedDirectory(directory: string) {
+  const actual = await fs.realpath(directory);
+  if (actual === directory) return true;
+  if (
+    process.platform !== "darwin" ||
+    actual.normalize("NFC") !== directory.normalize("NFC")
+  ) return false;
+  // HFS+ decomposes names. Accept that spelling only along ordinary directories.
+  let current = directory;
+  while (true) {
+    if (!(await fs.lstat(current)).isDirectory()) return false;
+    const parent = path.dirname(current);
+    if (parent === current) return true;
+    current = parent;
+  }
+}
+
 export class Receiver {
   private busy = new Set<string>();
   get active() {
@@ -271,7 +293,7 @@ export class Receiver {
     if (
       path.dirname(j.staging) === j.root &&
       path.basename(j.staging).startsWith(".sync-vault-") &&
-      (await fs.realpath(j.root)) === j.root
+      (await unchangedDirectory(j.root))
     )
       await fs.rm(j.staging, { recursive: true, force: true });
   }
@@ -280,7 +302,7 @@ export class Receiver {
     private onFiles: (stamp: Stamp, files: string[]) => Promise<void>,
     private allowed: (peer: string, stamp?: Stamp) => boolean,
   ) {}
-  async offer(peer: string, raw: unknown) {
+  async offer(peer: string, raw: unknown, requested = false) {
     const offer = validateOffer(raw),
       state = this.store.state;
     let job = state.incoming.find((j) => j.id === offer.id);
@@ -333,7 +355,7 @@ export class Receiver {
     }
     const staging = await fs.mkdtemp(path.join(root, ".sync-vault-"));
     const auto =
-      !!offer.stamp || state.peers.find((p) => p.id === peer)?.autoAccept;
+      requested || !!offer.stamp || state.peers.find((p) => p.id === peer)?.autoAccept;
     job = {
       id: offer.id,
       peer,
@@ -374,7 +396,7 @@ export class Receiver {
         e = j.offer.entries[i];
       if (!e || e.dir || !Number.isSafeInteger(i))
         throw Error("잘못된 파일 번호입니다.");
-      if ((await fs.realpath(j.staging)) !== j.staging)
+      if (!(await unchangedDirectory(j.staging)))
         throw Error("임시 폴더가 변경되었습니다.");
       const file = path.join(j.staging, String(i)),
         ready = file + ".verified";
@@ -451,8 +473,8 @@ export class Receiver {
       const j = this.get(peer, id);
       if (j.state === "완료") return {};
       if (
-        (await fs.realpath(j.root)) !== j.root ||
-        (await fs.realpath(j.staging)) !== j.staging
+        !(await unchangedDirectory(j.root)) ||
+        !(await unchangedDirectory(j.staging))
       )
         throw Error("수신 경로가 바뀌었습니다.");
       const reserved = new Set(
@@ -464,7 +486,7 @@ export class Receiver {
         const parent = e.name.includes("/")
           ? j.paths[e.name.slice(0, e.name.lastIndexOf("/"))]
           : j.root;
-        if (!parent || (await fs.realpath(parent)) !== parent)
+        if (!parent || !(await unchangedDirectory(parent)))
           throw Error("대상 폴더를 확인할 수 없습니다.");
         const name = path.posix.basename(e.name);
         for (let n = 0; ; n++) {

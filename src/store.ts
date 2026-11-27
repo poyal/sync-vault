@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { Settings, Peer, Outgoing, Incoming, Stamp } from "./types";
+import type { Settings, Peer, Outgoing, Incoming, Pull, Stamp } from "./types";
 import { development, product } from "./channel";
 export const settingsSchema = z
   .object({
@@ -14,7 +14,6 @@ export const settingsSchema = z
     text: z.boolean(),
     image: z.boolean(),
     files: z.boolean(),
-    releaseFolder: z.string().max(4096).default(""),
     login: z.boolean(),
     updates: z.boolean(),
     smallBytes: z
@@ -22,6 +21,7 @@ export const settingsSchema = z
       .int()
       .min(1024)
       .max(128 * 1024 ** 2),
+    historyLimit: z.number().int().min(1).max(50).default(10),
     smallCount: z.number().int().min(1).max(500),
   })
   .strict();
@@ -30,7 +30,7 @@ export function defaults(downloads: string): Settings {
     name: os.hostname().slice(0, 60) || "내 컴퓨터",
     adapter: "",
     receive: path.join(downloads, product),
-    paused: development,
+    paused: true,
     text: true,
     image: true,
     files: true,
@@ -38,7 +38,7 @@ export function defaults(downloads: string): Settings {
     updates: !development,
     smallBytes: 32 * 1024 ** 2,
     smallCount: 100,
-    releaseFolder: "",
+    historyLimit: 10,
   };
 }
 export interface State {
@@ -51,6 +51,9 @@ export interface State {
   stamp: Stamp;
   outgoing: Outgoing[];
   incoming: Incoming[];
+  pulls: Pull[];
+  vaultVersion?: number;
+  historyKey?: string;
   updateCheck: number;
 }
 export class Store {
@@ -70,13 +73,24 @@ export class Store {
       stamp: { clock: 0, origin: "" },
       outgoing: [],
       incoming: [],
+      pulls: [],
+      vaultVersion: 1,
       updateCheck: 0,
     };
     if (fs.existsSync(this.file)) {
       const load = (file: string) => {
         const data = JSON.parse(fs.readFileSync(file, "utf8"));
         if (data.version !== 1) throw Error("읽을 수 없는 데이터 버전입니다.");
+        // Older profiles may still name a LAN distribution folder.
+        if (data.settings) delete data.settings.releaseFolder;
         data.settings = settingsSchema.parse(data.settings);
+        data.pulls ??= [];
+        if (!data.vaultVersion) {
+          data.settings.paused = true;
+          for (const j of [...data.outgoing, ...data.incoming])
+            if (!["완료", "취소"].includes(j.state)) j.state = "취소";
+          data.vaultVersion = 1;
+        }
         return data;
       };
       try {

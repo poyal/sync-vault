@@ -9,16 +9,19 @@
     />
     <title>Sync Vault</title>
     <link rel="stylesheet" href="style.css" />
+    <script defer src="rooms.js"></script>
     <script defer src="app.js"></script>
   </head>
   <body>
     <aside>
       <header class="brand">
-        <span class="logo" aria-hidden="true">⇄</span> <span id="brand">Sync Vault</span>
+        <span class="logo" aria-hidden="true">⇄</span>
+        <span id="brand">Sync Vault</span>
       </header>
       <nav aria-label="메뉴">
-        <button data-page="devices" class="selected">기기</button
-        ><button data-page="transfers">전송</button
+        <button data-page="home" class="selected">홈</button
+        ><button data-page="devices">기기 연결</button
+        ><button data-page="transfers">가져오기 내역</button
         ><button data-page="settings">설정</button>
       </nav>
       <div class="self">
@@ -30,14 +33,42 @@
     </aside>
     <main>
       <div id="notice" role="status" hidden></div>
-      <section id="devices">
+      <section id="home">
+        <header class="heading">
+          <h1>홈</h1>
+          <button data-page="devices" class="primary">기기 연결</button>
+        </header>
+        <div id="home-requests"></div>
+        <h2>이 기기</h2>
+        <div id="local-card"></div>
+        <h2>등록한 기기</h2>
+        <div id="peer-cards"></div>
+      </section>
+      <section id="room" hidden>
+        <button class="back" data-page="home">← 홈</button>
+        <header class="heading">
+          <div>
+            <small id="room-os"></small>
+            <h1 id="room-name"></h1>
+          </div>
+          <button data-action="reload-room">새로고침</button>
+        </header>
+        <div class="switch" aria-label="공유 공간">
+          <button data-action="tab" data-value="history">클립보드</button
+          ><button data-action="tab" data-value="folder">공유 폴더</button>
+        </div>
+        <div id="room-tools"></div>
+        <div id="room-items" aria-live="polite"></div>
+      </section>
+      <section id="devices" hidden>
         <header class="heading">
           <div>
             <small>로컬 네트워크</small>
-            <h1>내 기기</h1>
+            <h1>기기 연결</h1>
           </div>
           <button data-action="refresh">다시 찾기</button>
         </header>
+        <div id="outbound"></div>
         <div id="registered"></div>
         <div id="pending"></div>
         <h2>주변 기기</h2>
@@ -70,20 +101,8 @@
       </section>
       <section id="transfers" hidden>
         <header class="heading">
-          <div>
-            <small>파일과 폴더</small>
-            <h1>전송</h1>
-          </div>
+          <h1>가져오기 내역</h1>
         </header>
-        <div id="dropzone" tabindex="0">
-          <b>보낼 파일이나 폴더를 여기에 놓으세요</b>
-          <div class="tools">
-            <button data-action="dialog-files">파일 추가</button
-            ><button data-action="dialog-folders">폴더 추가</button>
-          </div>
-        </div>
-        <div id="selection"></div>
-        <h2>전송 목록</h2>
         <div id="jobs"></div>
       </section>
       <section id="settings" hidden>
@@ -92,6 +111,7 @@
             <small>이 기기</small>
             <h1>설정</h1>
           </div>
+          <button data-page="about">앱 정보 · 업데이트</button>
         </header>
         <form id="prefs">
           <label>기기 이름<input name="name" required maxlength="60" /></label
@@ -107,38 +127,26 @@
             ></label
           >
           <fieldset>
-            <legend>클립보드 자동 공유</legend>
+            <legend>클립보드 기록</legend>
             <label
               ><input type="checkbox" name="text" />텍스트와 기본 서식</label
             ><label><input type="checkbox" name="image" />이미지</label
-            ><label><input type="checkbox" name="files" />파일 목록</label
             ><label
-              ><input type="checkbox" name="paused" />자동 공유 일시 중지</label
+              ><input type="checkbox" name="paused" />기록 수집·공유 일시
+              중지</label
             >
           </fieldset>
-          <div class="grid">
-            <label
-              >자동 파일 합계 (MiB)<input
-                type="number"
-                name="mib"
-                min="1"
-                max="128"
-                required /></label
-            ><label
-              >자동 파일 개수<input
-                type="number"
-                name="smallCount"
-                min="1"
-                max="500"
-                required
-            /></label>
-          </div>
+          <label
+            >이 기기에서 공유할 최근 기록 수<input
+              type="number"
+              min="1"
+              max="50"
+              required
+              name="historyLimit"
+          /></label>
           <fieldset>
             <legend>앱</legend>
             <label><input type="checkbox" name="login" />로그인할 때 실행</label
-            ><label
-              ><input type="checkbox" name="updates" />하루 한 번 업데이트
-              확인</label
             >
           </fieldset>
           <div class="tools">
@@ -148,23 +156,36 @@
             </button>
           </div>
         </form>
-        <h2>업데이트</h2>
-        <div id="update"></div>
-        <details>
-          <summary>이 기기를 사설 배포처로 사용</summary>
-          <p>
-            등록한 기기가 서명된 릴리스 폴더의 자기 OS용 패키지를 받을 수
-            있습니다.
-          </p>
-          <small id="release-location"></small>
-          <div class="tools">
-            <button id="release-folder">배포 폴더 선택</button
-            ><button id="release-off">배포 중지</button>
-          </div>
-        </details>
         <button data-action="reset" class="danger">
           이 기기의 등록 초기화
         </button>
+      </section>
+      <section id="about" hidden>
+        <button class="back" data-page="settings">← 설정</button>
+        <header class="heading"><h1>앱 정보 · 업데이트</h1></header>
+        <article class="panel">
+          <strong id="about-product"></strong>
+          <p id="about-version"></p>
+          <button data-action="open-releases">GitHub 릴리즈 열기</button>
+        </article>
+        <h2>업데이트</h2>
+        <div id="update">
+          <p id="dev-update" hidden>새 개발 설치본으로 갱신하세요.</p>
+          <div id="stable-update" hidden>
+            <label><input id="auto-update" type="checkbox" />하루 한 번 새 버전 확인</label>
+            <small id="update-checked"></small>
+            <p id="update-status" role="status"></p>
+            <p id="update-notes" hidden></p>
+            <progress id="update-progress" aria-label="업데이트 다운로드 진행률" max="100" hidden></progress>
+            <div class="tools">
+              <button data-action="check">지금 확인</button>
+              <button data-action="download" class="primary" hidden>다운로드</button>
+              <button data-action="cancel-update" hidden>다운로드 취소</button>
+              <button data-action="update-later" hidden>전송 완료 후 설치</button>
+              <button data-action="update-now" class="primary" hidden>지금 재시작</button>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
   </body>

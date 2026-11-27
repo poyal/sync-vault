@@ -4,6 +4,7 @@ export type Peer = {
   name: string;
   cert: string;
   endpoint: ShareEndpoint;
+  os?: string;
   autoAccept: boolean;
   seen: number;
 };
@@ -18,12 +19,12 @@ export interface Settings {
   files: boolean;
   login: boolean;
   updates: boolean;
+  historyLimit: number;
   smallBytes: number;
   smallCount: number;
-  releaseFolder: string;
 }
 export type Entry = { name: string; size: number; dir: boolean; hash: string };
-export type Source = Entry & { source: string; modified: number };
+export type Source = Entry & { source: string; modified: number; inode?: number; device?: number };
 export type Offer = { id: string; entries: Entry[]; stamp?: Stamp };
 export type Outgoing = {
   id: string;
@@ -48,7 +49,8 @@ export type Incoming = {
   finished?: number;
   error?: string;
 };
-export const features = ["text", "image", "html", "files", "resume"] as const;
+export type Pull = { id: string; peer: string; item: string; name: string; state: string; error?: string };
+export const features = ["vault", "text", "image", "html", "files", "resume"] as const;
 export function newer(a: Stamp, b: Stamp) {
   return a.clock > b.clock || (a.clock === b.clock && a.origin > b.origin);
 }

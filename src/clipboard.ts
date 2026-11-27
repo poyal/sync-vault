@@ -12,7 +12,12 @@ type Snap = { seq: number; flag: number; paths: string[] };
 export class Clips {
   private screenLocked = false;
   private epoch = 0;
-  get locked() { return this.screenLocked; }
+  get generation() {
+    return this.epoch;
+  }
+  get locked() {
+    return this.screenLocked;
+  }
   set locked(value: boolean) {
     if (value !== this.screenLocked) this.epoch++;
     this.screenLocked = value;
@@ -29,6 +34,7 @@ export class Clips {
     private send: (clip: Clip) => Promise<void>,
     private files: (paths: string[], stamp: Stamp) => Promise<void>,
     private note: (s: string) => void,
+    private historyMode = false,
   ) {}
   private command(mode: string, input?: Buffer): Promise<Buffer> {
     return new Promise((resolve, reject) => {
@@ -111,6 +117,7 @@ export class Clips {
       !s.flag &&
       !s.paths.length &&
       this.enabled &&
+      !process.env.SYNC_VAULT_QA_STATION &&
       (await clipboard.has(mark))
     )
       return;
@@ -125,12 +132,57 @@ export class Clips {
     if (!this.enabled || s.flag === 1) return;
     const config = this.store.state.settings;
     if (s.paths.length) {
-      if (config.files)
+      if (!this.historyMode && config.files)
         void this.files(s.paths, stamp).catch((e) => this.note(e.message));
       return;
     }
+    if (
+      this.historyMode &&
+      (process.env.SYNC_VAULT_QA_STATION || process.platform === "darwin")
+    ) {
+      const data = await this.command("read-content");
+      if (
+        !this.enabled ||
+        epoch !== this.epoch ||
+        (await this.snap()).seq !== s.seq
+      )
+        return;
+      let pos = 0;
+      const part = () => {
+        const len = data.readUInt32LE(pos);
+        pos += 4;
+        if (pos + len > data.length) throw Error("클립보드 형식 오류");
+        const value = data.subarray(pos, pos + len);
+        pos += len;
+        return value;
+      };
+      const text = part().toString(),
+        html = part().toString(),
+        png = part();
+      if (png.length && config.image)
+        await this.send({
+          kind: "image",
+          png: checkedPng(png).toString("base64"),
+          stamp,
+        });
+      else if (config.text && (text || html))
+        await this.send(
+          clipSchema.parse({
+            kind: "text",
+            text,
+            html: cleanHTML(html),
+            stamp,
+          }),
+        );
+      return;
+    }
     const items = await clipboard.read();
-    if ((await this.snap()).seq !== s.seq || !this.enabled || epoch !== this.epoch) return;
+    if (
+      (await this.snap()).seq !== s.seq ||
+      !this.enabled ||
+      epoch !== this.epoch
+    )
+      return;
     if (items.some((i) => i.types.includes(mark))) return;
     const imgs: Buffer[] = [];
     if (config.image) {
@@ -163,7 +215,22 @@ export class Clips {
           );
         }
     }
-    if ((await this.snap()).seq !== s.seq || !this.enabled || epoch !== this.epoch) return;
+    if (
+      (await this.snap()).seq !== s.seq ||
+      !this.enabled ||
+      epoch !== this.epoch
+    )
+      return;
+    if (this.historyMode && imgs.length) {
+      for (const img of imgs)
+        if (this.enabled && epoch === this.epoch)
+          await this.send({
+            kind: "image",
+            png: img.toString("base64"),
+            stamp,
+          });
+      return;
+    }
     if (imgs.length > 1) {
       const folder = path.join(this.store.home, "image-cache", randomUUID());
       await fs.mkdir(folder, { recursive: true, mode: 0o700 });
@@ -197,7 +264,12 @@ export class Clips {
         else html += cleanHTML(await blob.text());
       }
     }
-    if ((text || html) && (await this.snap()).seq === s.seq && this.enabled && epoch === this.epoch)
+    if (
+      (text || html) &&
+      (await this.snap()).seq === s.seq &&
+      this.enabled &&
+      epoch === this.epoch
+    )
       void this.send(
         clipSchema.parse({
           kind: "text",
@@ -229,37 +301,70 @@ export class Clips {
   receive(peer: string, raw: unknown) {
     const c = clipSchema.parse(raw);
     if (c.stamp.origin !== peer) throw Error("클립보드 발신자가 다릅니다.");
-    return this.apply(c.stamp, c.kind, async () => {
-      if (process.platform === "darwin") {
-        const value =
-          c.kind === "image"
-            ? {
-                png: checkedPng(Buffer.from(c.png, "base64")).toString(
-                  "base64",
-                ),
-              }
-            : { text: c.text, html: c.html ? cleanHTML(c.html) : undefined };
-        await this.command("content", Buffer.from(JSON.stringify(value)));
-        return;
-      }
-      const data: Record<string, Blob> = { [mark]: new Blob([c.stamp.origin]) };
-      data[
-        'electron application/osclipboard;format="CanUploadToCloudClipboard"'
-      ] = new Blob([new Uint8Array(4)]);
-      if (c.kind === "image")
-        data["image/png"] = new Blob(
-          [new Uint8Array(checkedPng(Buffer.from(c.png, "base64")))],
-          { type: "image/png" },
-        );
-      else {
-        data["text/plain"] = new Blob([c.text], { type: "text/plain" });
-        if (c.html)
-          data["text/html"] = new Blob([cleanHTML(c.html)], {
-            type: "text/html",
-          });
-      }
-      await clipboard.write([new ClipboardItem(data)]);
+    return this.apply(c.stamp, c.kind, () => this.write(c));
+  }
+  copySelected(peer: string, raw: unknown, guard: () => void) {
+    const c = clipSchema.parse(raw);
+    if (c.stamp.origin !== peer) throw Error("클립보드 발신자가 다릅니다.");
+    return this.enqueue(async () => {
+      guard();
+      await this.write(c);
+      this.last = (await this.snap()).seq;
     });
+  }
+  private async write(c: Clip) {
+    if (process.platform === "darwin") {
+      const value =
+        c.kind === "image"
+          ? {
+              png: checkedPng(Buffer.from(c.png, "base64")).toString("base64"),
+            }
+          : { text: c.text, html: c.html ? cleanHTML(c.html) : undefined };
+      await this.command("content", Buffer.from(JSON.stringify(value)));
+      return;
+    }
+    if (this.historyMode && process.env.SYNC_VAULT_QA_STATION) {
+      const fields =
+        c.kind === "image"
+          ? [
+              Buffer.alloc(0),
+              Buffer.alloc(0),
+              checkedPng(Buffer.from(c.png, "base64")),
+            ]
+          : [
+              Buffer.from(c.text),
+              Buffer.from(cleanHTML(c.html || "")),
+              Buffer.alloc(0),
+            ];
+      await this.command(
+        "write-content",
+        Buffer.concat(
+          fields.flatMap((b) => {
+            const n = Buffer.alloc(4);
+            n.writeUInt32LE(b.length);
+            return [n, b];
+          }),
+        ),
+      );
+      return;
+    }
+    const data: Record<string, Blob> = { [mark]: new Blob([c.stamp.origin]) };
+    data[
+      'electron application/osclipboard;format="CanUploadToCloudClipboard"'
+    ] = new Blob([new Uint8Array(4)]);
+    if (c.kind === "image")
+      data["image/png"] = new Blob(
+        [new Uint8Array(checkedPng(Buffer.from(c.png, "base64")))],
+        { type: "image/png" },
+      );
+    else {
+      data["text/plain"] = new Blob([c.text], { type: "text/plain" });
+      if (c.html)
+        data["text/html"] = new Blob([cleanHTML(c.html)], {
+          type: "text/html",
+        });
+    }
+    await clipboard.write([new ClipboardItem(data)]);
   }
   receiveFiles(stamp: Stamp, paths: string[]) {
     return this.apply(stamp, "files", async () => {
@@ -277,21 +382,33 @@ export class Clips {
   }
   async pruneImages() {
     const root = path.join(this.store.home, "image-cache");
-    const folders = await fs.readdir(root, { withFileTypes: true }).catch(e => {
-      if (e.code === "ENOENT") return [];
-      throw e;
-    });
-    const active = new Set(this.store.state.outgoing
-      .filter(j => j.state !== "완료" && j.state !== "취소")
-      .flatMap(j => j.entries.map(e => path.dirname(e.source))));
+    const folders = await fs
+      .readdir(root, { withFileTypes: true })
+      .catch((e) => {
+        if (e.code === "ENOENT") return [];
+        throw e;
+      });
+    const active = new Set(
+      this.store.state.outgoing
+        .filter((j) => j.state !== "완료" && j.state !== "취소")
+        .flatMap((j) => j.entries.map((e) => path.dirname(e.source))),
+    );
     for (const entry of folders) {
-      if (!entry.isDirectory() || !/^[0-9a-f-]{36}$/i.test(entry.name)) continue;
+      if (!entry.isDirectory() || !/^[0-9a-f-]{36}$/i.test(entry.name))
+        continue;
       const dir = path.join(root, entry.name);
-      if (active.has(dir) || Date.now() - (await fs.stat(dir)).mtimeMs < 86400000) continue;
+      if (
+        active.has(dir) ||
+        Date.now() - (await fs.stat(dir)).mtimeMs < 86400000
+      )
+        continue;
       // Only cache files created by capture() are eligible for expiry.
       for (const f of await fs.readdir(dir, { withFileTypes: true }))
-        if (f.isFile() && /^Image-\d+\.png$/.test(f.name)) await fs.unlink(path.join(dir, f.name));
-      await fs.rmdir(dir).catch(e => { if (e.code !== "ENOTEMPTY") throw e; });
+        if (f.isFile() && /^Image-\d+\.png$/.test(f.name))
+          await fs.unlink(path.join(dir, f.name));
+      await fs.rmdir(dir).catch((e) => {
+        if (e.code !== "ENOTEMPTY") throw e;
+      });
     }
   }
 }

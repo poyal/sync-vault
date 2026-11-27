@@ -13,17 +13,19 @@ import {
 } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { createIdentity, identitySchema } from "./identity";
 import { Store, defaults, settingsSchema, writable, volumeRoot } from "./store";
-import { Lan, binary } from "./lan";
+import { Lan } from "./lan";
 import { readJSON } from "./network";
 import { Clips } from "./clipboard";
-import { Receiver, inventory, createJob, transmit } from "./files";
-import { ReleaseFolder } from "./releases";
+import { Receiver } from "./files";
+import { releasesPage } from "./github-release";
 import { Updater } from "./update";
-import { type Outgoing, type Stamp, type ShareEndpoint } from "./types";
+import { History } from "./history";
+import { Shelf, inside } from "./shelf";
+import { Vault } from "./vault";
 import { development, product } from "./channel";
 const loginFlag = "--sync-vault-login";
 const loginOptions = process.platform === "win32" ? { args: [loginFlag] } : {};
@@ -31,7 +33,9 @@ const testHome = !app.isPackaged ? process.env.SYNC_VAULT_TEST_HOME : undefined;
 if (testHome) app.setPath("userData", path.resolve(testHome));
 app.setName(product);
 if (process.platform === "win32")
-  app.setAppUserModelId(development ? "io.syncvault.desktop.dev" : "io.syncvault.desktop");
+  app.setAppUserModelId(
+    development ? "io.syncvault.desktop.dev" : "io.syncvault.desktop",
+  );
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -56,19 +60,24 @@ let win: BrowserWindow | undefined,
   lan: Lan,
   clips: Clips,
   rx: Receiver,
+  vault: Vault,
   up: Updater;
 let quitting = false,
   updating = false,
   updateLater = false,
   notice = "",
-  pick: string[] = [],
+  outbound:
+    | {
+        id: string;
+        name: string;
+        code: string;
+        confirmed: boolean;
+        attempt?: string;
+      }
+    | undefined,
   pair: AbortController | undefined;
 let nextPrune = 0;
-let schedule: NodeJS.Timeout,
-  uiTick: NodeJS.Timeout | undefined,
-  preparing = 0;
-const running = new Map<string, AbortController>(),
-  retryAt = new Map<string, number>();
+let schedule: NodeJS.Timeout, uiTick: NodeJS.Timeout | undefined;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 type RequestLink = { page: "devices" | "transfers"; id: string };
 const waiting = new Map<string, Notification | undefined>();
@@ -85,10 +94,13 @@ function navigateTo(link: RequestLink) {
 function pendingRequests() {
   const entries = new Map<string, RequestLink>();
   for (const p of lan.pending.values())
-    entries.set("pair-" + p.id + "-" + (p.attempt || p.expires),
-      { page: "devices", id: p.id });
+    entries.set("pair-" + p.id + "-" + (p.attempt || p.expires), {
+      page: "devices",
+      id: p.id,
+    });
   for (const j of store.state.incoming)
-    if (j.state === "승인 대기") entries.set("file-" + j.id, { page: "transfers", id: j.id });
+    if (j.state === "승인 대기")
+      entries.set("file-" + j.id, { page: "transfers", id: j.id });
   return entries;
 }
 function updateRequests() {
@@ -105,11 +117,21 @@ function updateRequests() {
     if (waiting.has(key)) continue;
     waiting.set(key, undefined);
     changed = true;
-    if ((win?.isVisible() && win.isFocused()) || !Notification.isSupported()) continue;
-    const n = new Notification({ title: product, body: link.page === "devices"
-      ? "기기 등록 요청이 있습니다." : "파일 수신 요청이 있습니다." });
-    n.on("click", () => { if (pendingRequests().has(key)) navigateTo(link); });
-    n.on("failed", () => note("알림을 표시할 수 없습니다. 트레이에서 대기 요청을 확인하세요."));
+    if ((win?.isVisible() && win.isFocused()) || !Notification.isSupported())
+      continue;
+    const n = new Notification({
+      title: product,
+      body:
+        link.page === "devices"
+          ? "기기 등록 요청이 있습니다."
+          : "파일 수신 요청이 있습니다.",
+    });
+    n.on("click", () => {
+      if (pendingRequests().has(key)) navigateTo(link);
+    });
+    n.on("failed", () =>
+      note("알림을 표시할 수 없습니다. 트레이에서 대기 요청을 확인하세요."),
+    );
     waiting.set(key, n);
     n.show();
   }
@@ -125,7 +147,13 @@ function change() {
     uiTick = setTimeout(() => {
       uiTick = undefined;
       updateRequests();
-      if (!quitting && win && !win.isDestroyed() && win.isVisible() && !win.webContents.isCrashed())
+      if (
+        !quitting &&
+        win &&
+        !win.isDestroyed() &&
+        win.isVisible() &&
+        !win.webContents.isCrashed()
+      )
         win.webContents.send("vault:changed");
     }, 180);
 }
@@ -141,7 +169,8 @@ function show() {
 function status() {
   const s = store.state;
   return {
-    product, development,
+    product,
+    development,
     version: app.getVersion(),
     settings: s.settings,
     local: {
@@ -153,22 +182,28 @@ function status() {
     adapters: lan.adapters,
     diagnostic: lan.diagnostics,
     notice,
-    pick: pick.map((p) => path.basename(p)),
-    preparing,
+    locked: clips.locked,
+    outbound,
+    shelf: vault.shelf.root,
     peers: s.peers.map(({ cert, ...p }) => ({
       ...p,
       online: lan.available(p.id),
-      compatible: !!lan.online.get(p.id)?.features.length,
+      compatible: lan.online.get(p.id)?.features.includes("vault") === true,
+      locked: lan.online.get(p.id)?.locked === true,
       version: lan.online.get(p.id)?.version,
     })),
     nearby: [...lan.nearby.values()].filter(
       (q) => !s.peers.some((p) => p.id === q.id),
     ),
-    pending: [...lan.pending.values()].map(({ id, name, code }) => ({
-      id,
-      name,
-      code,
-    })),
+    pending: [...lan.pending.values()].map(
+      ({ id, name, code, confirmed, attempt }) => ({
+        id,
+        name,
+        code,
+        confirmed,
+        attempt,
+      }),
+    ),
     jobs: [
       ...s.outgoing.map((j) => ({
         id: j.id,
@@ -181,23 +216,38 @@ function status() {
         total: j.total,
         error: j.error,
       })),
-      ...s.incoming.map((j) => ({
-        id: j.id,
-        peer: j.peer,
-        direction: "받음",
-        name: j.offer.entries[0]?.name,
-        count: j.offer.entries.length,
-        state: j.state,
-        total: j.offer.entries.reduce((a, e) => a + e.size, 0),
-        done:
-          j.state === "완료"
-            ? j.offer.entries.reduce((a, e) => a + e.size, 0)
-            : Object.values(j.received ?? {}).reduce((a, b) => a + b, 0),
-        error: j.error,
-      })),
+      ...s.incoming
+        .filter((j) => !s.pulls.some((p) => p.id === j.id))
+        .map((j) => ({
+          id: j.id,
+          peer: j.peer,
+          direction: "받음",
+          name: j.offer.entries[0]?.name,
+          count: j.offer.entries.length,
+          state: j.state,
+          total: j.offer.entries.reduce((a, e) => a + e.size, 0),
+          done:
+            j.state === "완료"
+              ? j.offer.entries.reduce((a, e) => a + e.size, 0)
+              : Object.values(j.received ?? {}).reduce((a, b) => a + b, 0),
+          error: j.error,
+        })),
+      ...s.pulls.map((p) => {
+        const j = s.incoming.find((j) => j.id === p.id);
+        return {
+          ...p,
+          direction: "받음",
+          count: j?.offer.entries.length ?? 1,
+          total: j?.offer.entries.reduce((sum, e) => sum + e.size, 0) || 0,
+          done: Object.values(j?.received ?? {}).reduce((a, b) => a + b, 0),
+          location: j?.root || s.settings.receive,
+        };
+      }),
     ].reverse(),
     update: {
       status: up.status,
+      checkedAt: s.updateCheck,
+      busy: up.busy,
       next: up.next,
       notes: up.notes,
       percent: up.percent,
@@ -225,19 +275,28 @@ async function initialize() {
   const ico = nativeImage.createFromBitmap(pix, { width: 32, height: 32 });
   tray = new Tray(ico.resize({ width: 18, height: 18 }));
   tray.setToolTip(product);
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "기기 키 저장소 확인 중", enabled: false },
-    { type: "separator" },
-    { label: "종료", click: () => app.exit(0) },
-  ]));
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "기기 키 저장소 확인 중", enabled: false },
+      { type: "separator" },
+      { label: "종료", click: () => app.exit(0) },
+    ]),
+  );
   if (process.platform === "win32") tray.on("click", show);
   const home = app.getPath("userData");
   store = new Store(home, app.getPath("downloads"));
   // Convert the previous Windows login entry when updating an enabled install.
-  if (app.isPackaged && process.platform === "win32" && store.state.settings.login) {
+  if (
+    app.isPackaged &&
+    process.platform === "win32" &&
+    store.state.settings.login
+  ) {
     const legacy = app.getLoginItemSettings();
-    if (legacy.openAtLogin && legacy.executableWillLaunchAtLogin &&
-        !app.getLoginItemSettings(loginOptions).openAtLogin)
+    if (
+      legacy.openAtLogin &&
+      legacy.executableWillLaunchAtLogin &&
+      !app.getLoginItemSettings(loginOptions).openAtLogin
+    )
       app.setLoginItemSettings({ ...loginOptions, openAtLogin: true });
   }
   if (!(await safeStorage.isAsyncEncryptionAvailable()))
@@ -264,58 +323,24 @@ async function initialize() {
     "\\n",
     "\n",
   );
-  const releases = new ReleaseFolder(
-    () => store.state.settings.releaseFolder,
-    key,
-  );
   lan = new Lan(
     store,
     keys,
     app.getVersion(),
     async (id, route, req) => {
       if (updating) throw Error("업데이트 준비 중");
-      if (development && route.startsWith("/release/"))
-        throw Error("개발판은 업데이트를 배포하지 않습니다.");
-      if (route === "/release/index") {
-        await readJSON(req);
-        return releases.index();
+      if (route.startsWith("/vault/")) {
+        try {
+          return await vault.serve(id, route, await readJSON(req, 64000));
+        } catch (e) {
+          const error = msg(e);
+          return {
+            problem: /^[가-힣]/u.test(error)
+              ? error.slice(0, 180)
+              : "공유 항목을 읽을 수 없습니다. 목록을 새로고침하세요.",
+          };
+        }
       }
-      if (route === "/release/part") return releases.part(await readJSON(req));
-      if (route === "/clip") {
-        await clips.receive(id, await readJSON(req, 46 * 1024 ** 2));
-        return {};
-      }
-      if (route === "/offer") {
-        const offer = await readJSON(req, 8 * 1024 ** 2);
-        const result = await rx.locked((offer as any).id, () => rx.offer(id, offer));
-        change();
-        return result;
-      }
-      if (route === "/cancel") {
-        const { id: job } = z
-          .object({ id: z.string().uuid() })
-          .parse(await readJSON(req));
-        await rx.cancel(id, job);
-        return {};
-      }
-      if (route === "/finish") {
-        const { id: job } = z
-          .object({ id: z.string().uuid() })
-          .parse(await readJSON(req));
-        return rx.finish(id, job);
-      }
-      const m =
-        /^\/part\/([a-f0-9-]{36})\/(\d{1,5})\/(status|finish|replace|\d{1,16})$/.exec(
-          route,
-        );
-      if (m)
-        return rx.part(
-          id,
-          m[1],
-          Number(m[2]),
-          m[3],
-          /^\d/.test(m[3]) ? await binary(req) : await readJSON(req),
-        );
       throw Error("지원하지 않는 요청");
     },
     change,
@@ -325,106 +350,105 @@ async function initialize() {
     "native",
     process.platform === "win32" ? "clipboard.exe" : "clipboard",
   );
+  if (!store.state.historyKey) {
+    store.state.historyKey = (
+      await safeStorage.encryptStringAsync(randomBytes(32).toString("base64"))
+    ).toString("base64");
+    store.save();
+  }
+  const decryptedKey = await safeStorage.decryptStringAsync(
+    Buffer.from(store.state.historyKey, "base64"),
+  );
+  const vaultKey = Buffer.from(
+    typeof decryptedKey === "string" ? decryptedKey : decryptedKey.result,
+    "base64",
+  );
+  const history = new History(
+    path.join(home, "history"),
+    vaultKey,
+    () => store.state.settings.historyLimit,
+    (bytes) => {
+      const img = nativeImage.createFromBuffer(bytes),
+        { width, height } = img.getSize();
+      if (!width || !height) return;
+      const factor = Math.min(1, 72 / Math.max(width, height));
+      const thumb = img
+        .resize({
+          width: Math.max(1, Math.round(width * factor)),
+          height: Math.max(1, Math.round(height * factor)),
+        })
+        .toPNG();
+      if (thumb.length <= 24000) return thumb.toString("base64");
+    },
+  );
+  const qaProfile =
+    testHome ||
+    /^SyncVaultQA-[a-zA-Z0-9-]+$/.test(process.env.SYNC_VAULT_QA_STATION || "");
+  const shelf = new Shelf(
+    path.join(qaProfile ? home : app.getPath("home"), product, "공유"),
+    vaultKey,
+  );
+  await history.init();
+  await shelf.init();
   clips = new Clips(
     tool,
     store,
     lan.id,
     async (clip) => {
-      const recipients = store.state.peers.filter(
-        (p) =>
-          lan.available(p.id) &&
-          lan.online.get(p.id)?.features.includes(clip.kind),
+      const generation = clips.generation;
+      await history.add(
+        clip,
+        () => clips.enabled && clips.generation === generation,
       );
-      await Promise.allSettled(
-        recipients.map((p) =>
-          lan
-            .send(p.id, "/clip", clip)
-            .catch((e) => note(p.name + " · " + msg(e))),
-        ),
-      );
+      change();
     },
-    async (paths, stamp) => {
-      const settings = store.state.settings;
-      const stats = await Promise.all(
-        paths.slice(0, settings.smallCount + 1).map((f) => fs.lstat(f)),
-      );
-      if (
-        paths.length > settings.smallCount ||
-        stats.some((s) => !s.isFile() || s.isSymbolicLink()) ||
-        stats.reduce((a, s) => a + s.size, 0) > settings.smallBytes
-      ) {
-        pick = paths;
-        note("큰 파일 또는 폴더입니다. 받을 기기를 선택해 보내세요.");
-        return;
-      }
-      const peers = store.state.peers.filter(
-        (p) =>
-          lan.available(p.id) &&
-          lan.online.get(p.id)?.features.includes("files"),
-      );
-      if (!peers.length) return;
-      const entries = await inventory(paths);
-      if (stamp.clock !== store.state.stamp.clock || !clips.enabled) return;
-      for (const p of peers)
-        store.state.outgoing.push(createJob(entries, p.id, stamp));
-      store.save();
-      void pump();
-    },
+    async () => {},
     note,
+    true,
   );
   rx = new Receiver(
     store,
-    (s, p) => clips.receiveFiles(s, p),
-    (id, stamp) =>
+    async () => {},
+    (id) =>
       !updating &&
+      !clips.locked &&
       store.state.peers.some((p) => p.id === id) &&
-      (!stamp || (clips.enabled && store.state.settings.files)),
+      !lan.online.get(id)?.locked,
   );
-  up = new Updater(
-    home,
-    app.getVersion(),
-    process.env.SYNC_VAULT_FEED || "",
-    key,
-    change,
-    {
-      indexes: async () => {
-        const requests = store.state.peers
-          .filter((p) => lan.available(p.id))
-          .map(async (p) => ({
-            peer: p.id,
-            index: await lan.send(
-              p.id,
-              "/release/index",
-              {},
-              AbortSignal.timeout(4000),
-            ),
-          }));
-        if (store.state.settings.releaseFolder)
-          requests.push(
-            releases.index().then((index) => ({ peer: "this-device", index })),
-          );
-        const results = await Promise.allSettled(requests);
-        return results.flatMap((r) => {
-          if (r.status !== "fulfilled") return [];
-          const { peer, index } = r.value;
-          return [
-            {
-              peer,
-              manifest: Buffer.from(index.manifest, "base64"),
-              sig: Buffer.from(index.sig, "base64"),
-            },
-          ];
-        });
-      },
-      part: async (peer, name, offset, signal) => {
-        const r: any =
-          peer === "this-device"
-            ? await releases.part({ name, offset })
-            : await lan.send(peer, "/release/part", { name, offset }, signal);
-        return Buffer.from(r.data, "base64");
-      },
-    },
-  );
+  vault = new Vault(store, lan, shelf, history, clips, rx, change, (peer) => {
+    if (win && !win.isDestroyed() && !win.webContents.isCrashed())
+      win.webContents.send("vault:privacy", peer);
+  });
+  let lockGeneration = 0;
+  let unlockRetry: NodeJS.Timeout | undefined;
+  powerMonitor.on("lock-screen", () => {
+    ++lockGeneration;
+    clearTimeout(unlockRetry);
+    clips.locked = true;
+    vault.announce(true);
+    change();
+  });
+  powerMonitor.on("unlock-screen", () => {
+    const generation = ++lockGeneration;
+    const resumeClipboard = async () => {
+      if (quitting || generation !== lockGeneration) return;
+      try {
+        await clips.resetBaseline();
+        if (generation !== lockGeneration) return;
+        clips.locked = false;
+        vault.announce(false);
+        change();
+      } catch (e) {
+        note(msg(e));
+        unlockRetry = setTimeout(resumeClipboard, 2000);
+        unlockRetry.unref();
+      }
+    };
+    void resumeClipboard();
+  });
+  clips.locked = powerMonitor.getSystemIdleState(1) === "locked";
+  lan.locked = clips.locked;
+  up = new Updater(home, app.getVersion(), key, change);
   win = new BrowserWindow({
     width: 1060,
     height: 735,
@@ -465,50 +489,20 @@ async function initialize() {
     return command(action, value);
   });
   await win.loadFile(path.join(__dirname, "ui", "index.html"));
-  const loginStart = process.argv.includes(loginFlag) ||
-    (process.platform === "darwin" && app.getLoginItemSettings().wasOpenedAtLogin);
+  const loginStart =
+    process.argv.includes(loginFlag) ||
+    (process.platform === "darwin" &&
+      app.getLoginItemSettings().wasOpenedAtLogin);
   if (openRequested || !loginStart) win.show();
   win.setIcon(ico);
   tray.setToolTip(product);
   trayMenu();
   app.on("activate", show);
-  let lockGeneration = 0;
-  let unlockRetry: NodeJS.Timeout | undefined;
-  powerMonitor.on("lock-screen", () => {
-    ++lockGeneration;
-    clearTimeout(unlockRetry);
-    clips.locked = true;
-    change();
-  });
-  powerMonitor.on("unlock-screen", () => {
-    const generation = ++lockGeneration;
-    const resumeClipboard = async () => {
-      if (quitting || generation !== lockGeneration) return;
-      try {
-        await clips.resetBaseline();
-        if (generation !== lockGeneration) return;
-        clips.locked = false;
-        change();
-      } catch (e) {
-        note(msg(e));
-        unlockRetry = setTimeout(resumeClipboard, 2000);
-        unlockRetry.unref();
-      }
-    };
-    void resumeClipboard();
-  });
   powerMonitor.on("resume", () => void lan.poll(true));
   lan.start();
   await clips.start().catch((e) => note(msg(e)));
   schedule = setInterval(() => void pump(), 1000);
-  if (
-    store.state.settings.updates &&
-    Date.now() - store.state.updateCheck > 86400000
-  ) {
-    store.state.updateCheck = Date.now();
-    store.save();
-    void up.check();
-  }
+  autoCheckUpdate();
   const dir = process.env.SYNC_VAULT_HEALTH,
     token = process.env.SYNC_VAULT_TICKET;
   if (
@@ -527,16 +521,27 @@ async function initialize() {
   }
   change();
 }
-function keyForRelease() {
-  return (process.env.SYNC_VAULT_RELEASE_KEY || "").replaceAll("\\n", "\n");
+function checkUpdate() {
+  if (development || up.busy || up.ready) return;
+  store.state.updateCheck = Date.now();
+  persist();
+  return up.check();
+}
+function autoCheckUpdate() {
+  if (store.state.settings.updates && Date.now() - store.state.updateCheck >= 86400000)
+    void checkUpdate();
 }
 function trayMenu() {
   tray?.setContextMenu(
     Menu.buildFromTemplate([
       { label: product + " 열기", click: () => show() },
       ...Array.from(pendingRequests(), ([key, link]) => ({
-        label: (link.page === "devices" ? "기기 등록 요청" : "파일 수신 요청") + " 열기",
-        click: () => { if (pendingRequests().has(key)) navigateTo(link); },
+        label:
+          (link.page === "devices" ? "기기 등록 요청" : "파일 수신 요청") +
+          " 열기",
+        click: () => {
+          if (pendingRequests().has(key)) navigateTo(link);
+        },
       })),
       {
         label: store.state.settings.paused
@@ -583,121 +588,27 @@ async function pump() {
         .then((paths) => rx.pruneClipboard(paths))
         .catch((e) => note(msg(e)));
   }
-  if (
-    store.state.settings.updates &&
-    Date.now() - store.state.updateCheck >
-      (up.status.includes("기다리고") ? 60000 : 86400000)
-  ) {
-    store.state.updateCheck = Date.now();
-    persist();
-    void up.check();
-  }
+  autoCheckUpdate();
   if (
     updateLater &&
-    !running.size &&
-    !preparing &&
-    !store.state.outgoing.some((j) =>
-      ["대기", "보내는 중", "승인 대기", "재연결 대기"].includes(j.state),
-    ) &&
-    !store.state.incoming.some((j) => j.state === "수신 중")
+    !vault.active.size && !vault.shelf.isServing() &&
+    !store.state.pulls.some((p) =>
+      ["대기", "수신 중", "준비 중", "재연결 대기"].includes(p.state),
+    )
   ) {
     updateLater = false;
     void applyUpdate().catch((e) => note(msg(e)));
     return;
   }
-  for (const job of store.state.outgoing) {
-    if (running.size >= 2) break;
-    if (
-      job.cancelPending &&
-      job.state === "취소" &&
-      !running.has(job.id) &&
-      lan.available(job.peer) &&
-      (retryAt.get(job.id) || 0) <= Date.now()
-    ) {
-      const ctl = new AbortController();
-      running.set(job.id, ctl);
-      void lan
-        .send(
-          job.peer,
-          "/cancel",
-          { id: job.id },
-          AbortSignal.any([ctl.signal, AbortSignal.timeout(5000)]),
-        )
-        .then(() => {
-          delete job.cancelPending;
-        })
-        .catch(() => {
-          retryAt.set(job.id, Date.now() + 3000);
-        })
-        .finally(() => {
-          running.delete(job.id);
-          persist();
-        });
-      continue;
-    }
-    if (
-      !["대기", "보내는 중", "승인 대기", "재연결 대기"].includes(job.state) ||
-      running.has(job.id) ||
-      !lan.available(job.peer) ||
-      (retryAt.get(job.id) || 0) > Date.now()
-    )
-      continue;
-    if (!lan.online.get(job.peer)?.features.includes("files")) continue;
-    if (
-      job.stamp &&
-      (!clips.enabled ||
-        !store.state.settings.files ||
-        job.stamp.clock !== store.state.stamp.clock ||
-        job.stamp.origin !== store.state.stamp.origin)
-    ) {
-      job.state = "취소";
-      job.cancelPending = true;
-      persist();
-      continue;
-    }
-    const ctl = new AbortController();
-    running.set(job.id, ctl);
-    job.state = "보내는 중";
-    change();
-    void transmit(job, (...args) => lan.send(...args), ctl.signal, change)
-      .then((result) => {
-        if (ctl.signal.aborted) return;
-        job.state =
-          result === "complete"
-            ? "완료"
-            : result === "pending"
-              ? "승인 대기"
-              : "취소";
-        if (job.state === "완료") job.done = job.total;
-        job.error = "";
-        retryAt.set(job.id, Date.now() + 2500);
-      })
-      .catch((e) => {
-        if (ctl.signal.aborted && job.state !== "보내는 중") return;
-        job.state =
-          lan.available(job.peer) && !ctl.signal.aborted
-            ? "오류"
-            : "재연결 대기";
-        if (
-          job.state === "오류" &&
-          /socket|ECONN|시간 초과|ETIMEDOUT|EHOST|ENET/i.test(msg(e))
-        )
-          job.state = "재연결 대기";
-        job.error = msg(e);
-        retryAt.set(job.id, Date.now() + 3500);
-      })
-      .finally(() => {
-        running.delete(job.id);
-        persist();
-      });
-  }
+  vault.pump();
 }
 async function applyUpdate() {
   if (updating) throw Error("업데이트 중입니다.");
+  if (!up.ready) throw Error("검증된 업데이트가 없습니다.");
   updating = true;
   try {
-    for (const ctl of running.values()) ctl.abort();
-    while (running.size || preparing || rx.active)
+    vault.invalidate();
+    while (vault.active.size || rx.active)
       await new Promise((r) => setTimeout(r, 100));
     const launch = await up.prepare(
       process.execPath,
@@ -712,7 +623,10 @@ async function applyUpdate() {
 }
 async function command(action: string, v: any): Promise<any> {
   if (action === "state") return status();
-  if (development && ["check", "download", "update-now", "update-later"].includes(action))
+  if (
+    development &&
+    ["check", "download", "update-now", "update-later"].includes(action)
+  )
     throw Error("개발판은 새 개발 설치본으로 갱신하세요.");
   if (updating) throw Error("업데이트 중입니다.");
   if (action === "refresh") {
@@ -726,124 +640,82 @@ async function command(action: string, v: any): Promise<any> {
       .parse(v);
     const ctl = (pair = new AbortController());
     try {
-      const request = await lan.inspect(endpoint);
-      const choice = await dialog.showMessageBox(win!, {
-        type: "question",
-        buttons: ["등록 요청", "취소"],
-        defaultId: 1,
-        cancelId: 1,
-        message: request.name + " 기기를 등록할까요?",
-        detail: "양쪽 화면의 확인값이 같은지 확인하세요.\n" + request.code,
-      });
-      if (choice.response === 0) {
-        note("상대 기기에서 승인하세요 · " + request.code);
-        await lan.register(endpoint, request, ctl.signal);
-        note("기기 등록을 완료했습니다.");
-      }
-    } finally {
+      const req = await lan.inspect(endpoint);
+      outbound = {
+        id: req.id,
+        name: req.name,
+        code: req.code,
+        confirmed: false,
+        attempt: req.attempt,
+      };
+      change();
+      void lan
+        .register(endpoint, req, ctl.signal, () => !!outbound?.confirmed)
+        .then(() => note("기기 연결을 완료했습니다."))
+        .catch((e) => {
+          if (!ctl.signal.aborted) note(msg(e));
+        })
+        .finally(() => {
+          outbound = undefined;
+          pair = undefined;
+          change();
+        });
+    } catch (e) {
       pair = undefined;
+      throw e;
     }
     return;
   }
-  if (action === "approve") {
-    lan.approve(v);
-    change();
-    return;
-  }
-  if (action === "deny") {
-    lan.deny(v);
-    change();
-    return;
-  }
-  if (action === "forget") {
-    lan.forget(v);
-    for (const j of store.state.incoming.filter(
-      (j) => j.peer === v && j.state === "취소",
-    ))
-      await rx.cancel(v, j.id);
-    return;
-  }
-  if (action === "autoaccept") {
-    const peer = store.state.peers.find((p) => p.id === v.id);
-    if (peer) peer.autoAccept = v.value === true;
-    persist();
-    return;
-  }
-  if (action === "dialog-files" || action === "dialog-folders") {
-    const r = await dialog.showOpenDialog(win!, {
-      properties: [
-        action === "dialog-folders" ? "openDirectory" : "openFile",
-        "multiSelections",
-      ],
-    });
-    if (!r.canceled) pick = [...new Set([...pick, ...r.filePaths])];
-    change();
-    return;
-  }
-  if (action === "drop") {
-    pick = [
-      ...new Set([
-        ...pick,
-        ...z
-          .array(z.string().min(1).max(32768))
-          .max(8000)
-          .parse(v)
-          .filter((s) => path.isAbsolute(s)),
-      ]),
-    ];
-    change();
-    return;
-  }
-  if (action === "clear") {
-    pick = [];
-    change();
-    return;
-  }
-  if (action === "send") {
-    if (!store.state.peers.some((p) => p.id === v) || !pick.length)
-      throw Error("파일과 받을 기기를 선택하세요.");
-    const selected = pick;
-    preparing++;
-    change();
-    try {
-      const entries = await inventory(selected);
-      if (!store.state.peers.some((p) => p.id === v))
-        throw Error("기기 등록이 해제되었습니다.");
-      store.state.outgoing.push(createJob(entries, v));
-      if (pick === selected) pick = [];
-      persist();
-      void pump();
-    } finally {
-      preparing--;
+  if (action === "pair-confirm" || action === "pair-cancel") {
+    if (outbound && outbound.attempt === v) {
+      if (action === "pair-confirm") outbound.confirmed = true;
+      else pair?.abort();
       change();
     }
     return;
   }
+  if (action === "approve") {
+    if (!v || lan.pending.get(v.id)?.attempt !== v.attempt)
+      throw Error("등록 요청이 변경되었습니다.");
+    lan.approve(v.id);
+    change();
+    return;
+  }
+  if (action === "deny") {
+    if (v && lan.pending.get(v.id)?.attempt === v.attempt) lan.deny(v.id);
+    change();
+    return;
+  }
+  if (action === "forget") {
+    await vault.forget(v);
+    return;
+  }
+  if (action === "vault-list")
+    return vault.list(v.peer, v.id ?? "", v.offset ?? 0);
+  if (action === "vault-history") return vault.records(v.peer);
+  if (action === "vault-copy") return vault.copy(v.peer, v.id);
+  if (action === "vault-get") return vault.enqueue(v.peer, v.id, v.name);
+  if (action === "history-delete" || action === "history-clear") {
+    vault.check(lan.id);
+    await vault.history.remove(
+      action === "history-delete" ? z.string().uuid().parse(v) : undefined,
+    );
+    change();
+    return;
+  }
+  if (action === "shelf-open") {
+    vault.check(lan.id);
+    const error = await shell.openPath(vault.shelf.root);
+    if (error) throw Error("공유 폴더를 열 수 없습니다.");
+    return;
+  }
   if (action === "job") {
-    const j = store.state.outgoing.find((j) => j.id === v.id),
-      i = store.state.incoming.find((j) => j.id === v.id);
-    if (
-      v.op === "retry" &&
-      j &&
-      store.state.peers.some((p) => p.id === j.peer)
-    ) {
-      j.state = "대기";
-      j.error = "";
-      retryAt.delete(j.id);
-    }
-    if (v.op === "accept" && i?.state === "승인 대기") i.state = "수신 중";
-    if (v.op === "cancel") {
-      if (j && j.state !== "완료") {
-        j.cancelPending = true;
-        retryAt.delete(j.id);
-        j.state = "취소";
-        running.get(j.id)?.abort();
-      }
-      if (i && i.state !== "완료") await rx.cancel(i.peer, i.id);
-    }
-    if (v.op === "open" && i?.state === "완료")
-      shell.showItemInFolder(Object.values(i.paths)[0] ?? i.root);
-    persist();
+    if (v.op === "open") {
+      const i = store.state.incoming.find(
+        (j) => j.id === v.id && j.state === "완료",
+      );
+      if (i) shell.showItemInFolder(Object.values(i.paths)[0] ?? i.root);
+    } else await vault.action(v.id, v.op);
     return;
   }
   if (action === "folder") {
@@ -869,20 +741,21 @@ async function command(action: string, v: any): Promise<any> {
   if (action === "settings") {
     const old = store.state.settings,
       proposed = settingsSchema.parse({ ...old, ...v });
-    if (development) {
-      proposed.updates = false;
-      proposed.releaseFolder = "";
-    }
-    if (proposed.releaseFolder && proposed.releaseFolder !== old.releaseFolder)
-      await new ReleaseFolder(
-        () => proposed.releaseFolder,
-        keyForRelease(),
-      ).index();
-    if (proposed.receive !== old.receive)
+    if (development) proposed.updates = false;
+    if (proposed.receive !== old.receive) {
+      if (
+        inside(vault.shelf.root, proposed.receive) ||
+        inside(proposed.receive, vault.shelf.root)
+      )
+        throw Error("공유 폴더와 다른 수신 위치를 선택하세요.");
       proposed.receive = writable(proposed.receive);
+    }
     if (old.paused !== proposed.paused) await clips.resetBaseline();
     if (proposed.login !== old.login) {
-      app.setLoginItemSettings({ ...loginOptions, openAtLogin: proposed.login });
+      app.setLoginItemSettings({
+        ...loginOptions,
+        openAtLogin: proposed.login,
+      });
       if (
         app.isPackaged &&
         app.getLoginItemSettings(loginOptions).openAtLogin !== proposed.login
@@ -900,6 +773,7 @@ async function command(action: string, v: any): Promise<any> {
       store.state.receiveVolume = oldVolume;
       throw e;
     }
+    await vault.history.trim();
     if (old.name !== proposed.name || old.adapter !== proposed.adapter)
       await lan.poll(true);
     trayMenu();
@@ -917,7 +791,7 @@ async function command(action: string, v: any): Promise<any> {
       defaultId: 0,
     });
     if (r.response !== 1) return;
-    for (const p of [...store.state.peers]) lan.forget(p.id);
+    for (const p of [...store.state.peers]) await vault.forget(p.id);
     store.state.sealed = "";
     store.save();
     store.save();
@@ -925,7 +799,8 @@ async function command(action: string, v: any): Promise<any> {
     app.quit();
     return;
   }
-  if (action === "check") return up.check();
+  if (action === "open-releases") return shell.openExternal(releasesPage);
+  if (action === "check") return checkUpdate();
   if (action === "download") return up.download();
   if (action === "cancel-update") return up.cancel();
   if (action === "update-later") {
@@ -947,7 +822,7 @@ app.on("before-quit", () => {
   clearTimeout(uiTick);
   clearInterval(schedule);
   pair?.abort();
-  for (const c of running.values()) c.abort();
+  vault?.invalidate();
   clips?.stop();
   void lan?.stop();
   tray?.destroy();

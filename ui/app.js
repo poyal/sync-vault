@@ -9,7 +9,7 @@ const esc = (s) =>
       ],
   );
 let model,
-  page = "devices",
+  page = "home",
   dirty = false,
   localError = "",
   loading = false,
@@ -73,6 +73,8 @@ async function refresh() {
   }
 }
 function nav(p) {
+  if (page !== p) localError = "";
+  if (p !== "room") clearRoom();
   page = p;
   document
     .querySelectorAll("main section")
@@ -94,7 +96,10 @@ function render() {
   $("#myip").textContent = m.local.address
     ? m.local.address + ":" + m.local.port
     : "연결 대기";
+  if (page === "home") renderHome(m);
+  if (page === "room") renderRoom(m);
   if (page === "devices") {
+    $("#outbound").innerHTML = m.outbound ? pairing(m.outbound, true) : "";
     $("#registered").innerHTML =
       m.peers
         .map((p) =>
@@ -111,11 +116,7 @@ function render() {
               (p.seen
                 ? " · 마지막 연결 " + new Date(p.seen).toLocaleTimeString("ko")
                 : ""),
-            button(
-              p.autoAccept ? "자동 수락 켜짐" : "파일마다 수락",
-              "autoaccept",
-              p.id,
-            ) + button("해제", "forget", p.id),
+            button("열기", "enter", p.id) + button("해제", "forget", p.id),
           ),
         )
         .join("") ||
@@ -137,16 +138,7 @@ function render() {
           ),
         )
         .join("") || empty("주변에서 새 기기를 기다리고 있습니다.");
-    $("#pending").innerHTML = m.pending
-      .map((p) =>
-        row(
-          p.name + "의 등록 요청",
-          "양쪽 확인값을 대조하세요 · " + p.code,
-          button("승인", "approve", p.id, "primary") +
-            button("거절", "deny", p.id),
-        ),
-      )
-      .join("");
+    $("#pending").innerHTML = m.pending.map((p) => pairing(p, false)).join("");
     $("#diagnostic").textContent = [
       m.diagnostic,
       "발견 " + m.nearby.length + "대",
@@ -155,16 +147,6 @@ function render() {
     ].join(" · ");
   }
   if (page === "transfers") {
-    $("#selection").innerHTML = m.pick.length
-      ? row(
-          m.pick.slice(0, 3).join(", ") +
-            (m.pick.length > 3 ? " 외 " + (m.pick.length - 3) + "개" : ""),
-          m.preparing ? "원본 해시 확인 중" : "받을 기기를 선택하세요.",
-          m.peers
-            .map((p) => button(p.name + "에 보내기", "send", p.id, "primary"))
-            .join("") + button("비우기", "clear"),
-        )
-      : "";
     $("#jobs").innerHTML =
       m.jobs
         .map(
@@ -194,7 +176,7 @@ function render() {
             (j.direction === "받음" && j.state === "승인 대기"
               ? button("수락", "accept", j.id, "primary")
               : "") +
-            (j.direction === "보냄" && ["오류", "재연결 대기"].includes(j.state)
+            (j.item && ["오류", "재연결 대기"].includes(j.state)
               ? button("실패 항목 재시도", "retry", j.id)
               : "") +
             (!["완료", "취소"].includes(j.state)
@@ -204,6 +186,7 @@ function render() {
               ? button("저장 위치 열기", "open", j.id)
               : "") +
             "</div>" +
+            (j.location ? "<small>" + esc(j.location) + "</small>" : "") +
             esc(j.error) +
             "</article>",
         )
@@ -212,9 +195,8 @@ function render() {
   if (page === "settings") {
     const f = $("#prefs").elements;
     if (!dirty) {
-      for (const k of ["name", "receive", "smallCount"])
+      for (const k of ["name", "receive", "historyLimit"])
         f[k].value = m.settings[k];
-      f.mib.value = m.settings.smallBytes / 1048576;
       f.adapter.innerHTML =
         '<option value="">자동 선택</option>' +
         m.adapters
@@ -228,40 +210,41 @@ function render() {
           )
           .join("");
       f.adapter.value = m.settings.adapter;
-      for (const k of ["login", "updates", "text", "image", "files", "paused"])
+      for (const k of ["login", "text", "image", "paused"])
         f[k].checked = m.settings[k];
     }
-    $("#release-location").textContent =
-      m.settings.releaseFolder || "배포 중지됨";
+  }
+  if (page === "about") {
     const u = m.update;
-    f.updates.disabled = m.development;
-    $("#release-location").closest("details").hidden = m.development;
-    if (m.development) {
-      $("#update").textContent = "개발판은 새 개발 설치본으로 갱신하세요.";
-      return;
-    }
-    $("#update").innerHTML =
-      "<strong>Sync Vault " +
-      esc(m.version) +
-      "</strong><p>" +
-      esc(u.status) +
-      (u.next ? " · " + esc(u.next) : "") +
-      (u.later ? " · 전송 완료 후 적용 예정" : "") +
-      "</p><small>" +
-      esc(u.notes) +
-      '</small><div class="tools">' +
-      button("지금 확인", "check") +
-      (u.status === "다운로드 가능" || u.status.startsWith("다운로드 중단")
-        ? button("다운로드", "download")
-        : "") +
-      (u.status === "다운로드 중"
-        ? button("다운로드 취소 (" + u.percent + "%)", "cancel-update")
-        : "") +
-      (u.ready
-        ? button("전송 완료 후 설치", "update-later") +
-          button("지금 재시작", "update-now")
-        : "") +
-      "</div>";
+    $("#about-product").textContent = m.product;
+    $("#about-version").textContent = "현재 버전 " + m.version;
+    $("#dev-update").hidden = !m.development;
+    $("#stable-update").hidden = m.development;
+    if (m.development) return;
+    $("#auto-update").checked = m.settings.updates;
+    $("#update-checked").textContent = u.checkedAt
+      ? "마지막 확인 " + new Date(u.checkedAt).toLocaleString("ko-KR")
+      : "아직 확인하지 않았습니다.";
+    const downloading = u.status === "다운로드 중";
+    const retry = u.status === "다운로드 취소됨" || u.status.startsWith("다운로드 중단");
+    const status = u.status === "대기" ? "GitHub에서 새 정식 버전을 확인할 수 있습니다." : u.status;
+    $("#update-status").textContent = [
+      status, u.next && "공개 버전 " + u.next,
+      downloading && u.percent + "%", u.later && "전송 완료 후 설치 예정",
+    ].filter(Boolean).join(" · ");
+    $("#update-notes").textContent = u.notes;
+    $("#update-notes").hidden = !u.notes;
+    $("#update-progress").hidden = !downloading;
+    $("#update-progress").value = u.percent;
+    const check = $('#update [data-action="check"]');
+    check.disabled = u.busy || u.ready;
+    check.textContent = u.status === "버전 확인 중" ? "확인 중…" : "지금 확인";
+    const download = $('#update [data-action="download"]');
+    download.hidden = u.status !== "다운로드 가능" && !retry;
+    download.textContent = retry ? "다시 다운로드" : "다운로드";
+    $('#update [data-action="cancel-update"]').hidden = !downloading;
+    $('#update [data-action="update-later"]').hidden = !u.ready || u.later;
+    $('#update [data-action="update-now"]').hidden = !u.ready;
   }
 }
 async function pairAt(value) {
@@ -292,11 +275,13 @@ document.addEventListener("click", async (e) => {
     await pairAt(v);
     return;
   }
-  if (a === "autoaccept") {
-    const p = model.peers.find((p) => p.id === v);
-    await call(a, { id: v, value: !p.autoAccept });
+  if (await roomAction(a, v, b)) return;
+  if (a === "approve" || a === "deny") {
+    const p = model.pending.find((p) => p.id === v);
+    if (p) await call(a, { id: v, attempt: b.dataset.attempt });
     return;
   }
+
   if (["retry", "accept", "cancel", "open"].includes(a)) {
     await call("job", { id: v, op: a });
     return;
@@ -321,10 +306,9 @@ $("#prefs").onsubmit = async (e) => {
       name: f.name.value,
       receive: f.receive.value,
       adapter: f.adapter.value,
-      smallCount: Number(f.smallCount.value),
-      smallBytes: Number(f.mib.value) * 1048576,
+      historyLimit: Number(f.historyLimit.value),
     };
-  for (const k of ["login", "updates", "text", "image", "files", "paused"])
+  for (const k of ["login", "text", "image", "paused"])
     s[k] = f[k].checked;
   const saved = await call("settings", s);
   if (saved !== null) {
@@ -339,36 +323,23 @@ $("#choose-folder").onclick = async () => {
     $("#prefs").elements.receive.value = folder;
   }
 };
-const zone = $("#dropzone");
-document.addEventListener("dragover", (e) => e.preventDefault());
-document.addEventListener("drop", (e) => e.preventDefault());
-zone.ondragover = (e) => {
-  e.preventDefault();
-  zone.classList.add("hover");
-};
-zone.ondragleave = () => zone.classList.remove("hover");
-zone.ondrop = async (e) => {
-  e.preventDefault();
-  zone.classList.remove("hover");
-  try {
-    await api.drop([...e.dataTransfer.files]);
-  } catch (err) {
-    localError = err.message;
-  }
-  await refresh();
-};
-$("#release-folder").onclick = async () => {
-  const folder = await call("folder");
-  if (folder) await call("settings", { releaseFolder: folder });
-};
-$("#release-off").onclick = () => call("settings", { releaseFolder: "" });
+$("#auto-update").onchange = (e) => call("settings", { updates: e.target.checked });
 api.listen(refresh);
+api.onPrivacy((peer) => {
+  if (page === "room" && (!peer || peer === roomPeer)) {
+    clearRoom();
+    $("#room-tools").replaceChildren();
+    void refresh();
+  }
+});
 api.onRequest(async ({ page, id }) => {
   if (!["devices", "transfers"].includes(page)) return;
   nav(page);
   await refresh();
   const action = page === "devices" ? "approve" : "accept";
-  const target = document.querySelector('[data-action="' + action + '"][data-value="' + CSS.escape(id) + '"]');
+  const target = document.querySelector(
+    '[data-action="' + action + '"][data-value="' + CSS.escape(id) + '"]',
+  );
   target?.scrollIntoView({ block: "center" });
   target?.closest("article")?.setAttribute("tabindex", "-1");
   target?.closest("article")?.focus({ preventScroll: true });

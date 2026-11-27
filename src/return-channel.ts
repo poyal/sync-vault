@@ -5,7 +5,7 @@ import { z } from "zod";
 const route = z
   .string()
   .regex(
-    /^\/(?:clip|offer|finish|cancel|release\/(?:index|part)|part\/[a-f0-9-]{36}\/\d{1,5}\/(?:\d{1,16}|replace|status|finish))$/,
+    /^\/(?:vault\/(?:list|history|clip|manifest|part|access|unlink|release)|clip|offer|finish|cancel|release\/(?:index|part)|part\/[a-f0-9-]{36}\/\d{1,5}\/(?:\d{1,16}|replace|status|finish))$/,
   );
 const envelope = z
   .object({

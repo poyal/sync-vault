@@ -1,179 +1,101 @@
-// Run against an isolated, older packaged application and an already signed local feed.
+// Exercise the installed app's GitHub updater in a disposable copy. The optional
+// asset directory supplies recorded GitHub responses before a candidate is public.
+import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
-import { strict as assert } from "node:assert";
-import { chromium } from "playwright";
-import { spawn } from "node:child_process";
-import net from "node:net";
-const [previous, feed] = process.argv.slice(2);
-if (!previous || !feed)
-  throw Error("upgrade.mjs <older packaged app directory> <signed feed>");
-const home = await fs.mkdtemp(path.join(os.tmpdir(), "sv-upgrade-")),
-  profile = path.join(home, "profile"),
-  win = process.platform === "win32";
-const appRoot = path.join(home, win ? "Sync Vault" : "Sync Vault.app");
-await fs.cp(previous, appRoot, { recursive: true, verbatimSymlinks: true });
-await fs.mkdir(profile);
-const exe = path.join(
-    appRoot,
-    win ? "Sync Vault.exe" : "Contents/MacOS/Sync Vault",
-  ),
-  manifest = JSON.parse(
-    await fs.readFile(path.join(feed, "update.json"), "utf8"),
-  );
-const deferred = process.env.SYNC_VAULT_QA_DEFER === "1";
-const env = {
-  ...process.env,
-  SYNC_VAULT_TEST_HOME: profile,
-  SYNC_VAULT_TEST_LOOPBACK: "1",
-  SYNC_VAULT_QA_STATION: "SyncVaultQA-upgrade-" + path.basename(home),
-};
-delete env.ELECTRON_RUN_AS_NODE;
-const listener = net.createServer();
-await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
-const { port } = listener.address();
-await new Promise((resolve) => listener.close(resolve));
-if (!win) env.SYNC_VAULT_QA_MOCK_KEYCHAIN = "1";
-const previousProcess = spawn(
-  exe,
-  [
-    "--user-data-dir=" + profile,
-    "--remote-debugging-address=127.0.0.1",
-    "--remote-debugging-port=" + port,
-    ...(win ? [] : ["--use-mock-keychain"]),
-  ],
-  { env, stdio: "ignore", detached: true },
-);
-console.log("Upgrade fixture", home);
-let browser;
-let page;
-for (let i = 0; i < 120 && !page; i++) {
-  if (!browser)
-    browser = await chromium
-      .connectOverCDP("http://127.0.0.1:" + port, { timeout: 1000 })
-      .catch(() => undefined);
-  page = browser
-    ?.contexts()
-    .flatMap((c) => c.pages())
-    .find((p) => p.url().startsWith("file:"));
-  if (!page) await new Promise((r) => setTimeout(r, 250));
-}
-assert.ok(page, "packaged window did not start");
-let updatedPID = 0;
-let peerFixture;
+import { setTimeout as delay } from "node:timers/promises";
+import { expect } from "@playwright/test";
+
+const [previous, version, assets] = process.argv.slice(2);
+if (!previous || !/^\d+\.\d+\.\d+$/.test(version))
+  throw Error("upgrade.mjs <이전 앱 폴더> <대상 버전> [서명된 GitHub 자산 폴더]");
+if (process.platform === "darwin") process.env.SYNC_VAULT_QA_MOCK_KEYCHAIN = "1";
+const { base, launch, approve, cleanup, wait } = await import("./desktop-peers.mjs");
+const win = process.platform === "win32";
+const staged = path.join(base, win ? "Sync Vault" : "Sync Vault.app");
+let updatedPid;
 try {
-  await page.locator("#myip").filter({ hasText: /:\d+/ }).waitFor();
-  const actual = await page.evaluate(() => window.vault.call("state"));
-  const before = JSON.parse(await fs.readFile(path.join(profile, "state.json"), "utf8"));
-  assert.notEqual(actual.version, manifest.version);
-  await page.evaluate(
-    (folder) =>
-      window.vault.call("settings", {
-        name: "업데이트 보존 QA",
-        releaseFolder: folder,
-        paused: true,
-      }),
-    path.resolve(feed),
-  );
-  await page.evaluate(() => window.vault.call("check"));
-  let s = await page.evaluate(() => window.vault.call("state"));
-  assert.equal(s.update.status, "다운로드 가능");
-  await page.evaluate(() => window.vault.call("download"));
-  s = await page.evaluate(() => window.vault.call("state"));
-  assert.ok(s.update.ready, s.update.status);
-  if (deferred) {
-    peerFixture = await import("./desktop-peers.mjs");
-    const peer = await peerFixture.launch("Update-peer");
-    const receive = path.join(peerFixture.base, "received");
-    await peer.call("settings", { receive });
-    const name = "defer.txt",
-      payload = "업데이트 전 승인한 파일";
-    const sender = {
-      page,
-      label: "업데이트 보존 QA",
-      state: () => page.evaluate(() => window.vault.call("state")),
+  await fs.cp(previous, staged, { recursive: true, verbatimSymlinks: true });
+  const client = await launch("Update-client", path.join(staged, win ? "Sync Vault.exe" : "Contents/MacOS/Sync Vault"));
+  const peer = await launch("Update-peer");
+  await approve(client, peer);
+  const inbox = path.join(base, "received");
+  await client.call("settings", { receive: inbox });
+  const before = await client.state();
+  assert.notEqual(before.version, version);
+  const settingsFile = path.join(client.profile, "state.json");
+  const identity = JSON.parse(await fs.readFile(settingsFile, "utf8")).sealed;
+  if (assets) {
+    const names = ["update.json", "update.sig", "SyncVault-" + version + "-" + process.platform + "-" + process.arch + ".zip"];
+    const files = await Promise.all(names.map(async name => {
+      const file = path.resolve(assets, name);
+      return { name, file, size: (await fs.stat(file)).size };
+    }));
+    await client.app.evaluate((_electron, { files, version }) => {
+      const fs = process.getBuiltinModule("node:fs");
+      const { Readable } = process.getBuiltinModule("node:stream");
+      const base = "https://github.com/poyal/sync-vault/releases/download/v" + version + "/";
+      globalThis.fetch = async (url) => {
+        if (String(url) === "https://api.github.com/repos/poyal/sync-vault/releases/latest")
+          return Response.json({ draft: false, prerelease: false, tag_name: "v" + version,
+            assets: files.map(f => ({ name: f.name, size: f.size, state: "uploaded", browser_download_url: base + f.name })) });
+        const file = files.find(f => String(url) === base + f.name);
+        if (!file) throw Error("예상하지 않은 URL");
+        return new Response(Readable.toWeb(fs.createReadStream(file.file)));
+      };
+    }, { files, version });
+  }
+  const { page } = client;
+  await page.locator('aside [data-page="settings"]').click();
+  await page.getByRole("button", { name: "앱 정보 · 업데이트" }).click();
+  await page.getByRole("button", { name: "지금 확인" }).click();
+  await expect(page.locator("#update-status")).toContainText("다운로드 가능", { timeout: 30000 });
+  assert.equal((await client.state()).update.next, version);
+  await page.getByRole("button", { name: "다운로드", exact: true }).click();
+  const install = page.getByRole("button", { name: "전송 완료 후 설치" });
+  await expect(install).toBeVisible({ timeout: 300000 });
+  const [transaction] = await fs.readdir(path.join(client.profile, "updates"));
+  const tx = path.join(client.profile, "updates", transaction);
+  const source = await peer.state();
+  const file = path.join(source.shelf, "transfer.txt");
+  await fs.writeFile(file, "업데이트 전 파일");
+  const item = (await client.call("vault-list", { peer: source.local.id })).rows.find(i => i.name === "transfer.txt");
+  // Hold only this fixture's source file open request while installation is queued.
+  await peer.app.evaluate((_electron, file) => {
+    const fs = process.getBuiltinModule("node:fs/promises");
+    const open = fs.open.bind(fs);
+    const gate = new Promise(resolve => { globalThis.finishUpdateTestTransfer = resolve; });
+    fs.open = async (p, ...args) => {
+      if (p === file) await gate;
+      return open(p, ...args);
     };
-    await peerFixture.approve(peer, sender);
-    const source = await peerFixture.fixture(name, payload);
-    await page.evaluate(
-      ([file, id]) =>
-        window.vault
-          .call("drop", [file])
-          .then(() => window.vault.call("send", id)),
-      [source, (await peer.state()).local.id],
-    );
-    await peerFixture.job(peer, name, "승인 대기");
-    await page.evaluate(() => window.vault.call("update-later"));
-    await new Promise((r) => setTimeout(r, 2800));
-    assert.equal((await sender.state()).version, actual.version);
-    assert.equal((await sender.state()).update.later, true);
-    await peerFixture.action(peer, name, "accept");
-    await peerFixture.job(peer, name, "완료");
-    assert.equal(await fs.readFile(path.join(receive, name), "utf8"), payload);
-  } else {
-    void page.evaluate(() => window.vault.call("update-now")).catch(() => {});
-  }
-  const transactions = await fs.readdir(path.join(profile, "updates"));
-  assert.equal(transactions.length, 1);
-  const tx = path.join(profile, "updates", transactions[0]);
-  for (let i = 0; i < 240; i++) {
-    if (
-      await fs.stat(path.join(tx, "failed.txt")).then(
-        () => true,
-        () => false,
-      )
-    )
-      throw Error("Update rolled back: " + tx);
-    if (
-      await fs.stat(path.join(tx, "complete")).then(
-        () => true,
-        () => false,
-      )
-    )
-      break;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  assert.ok((await fs.readFile(path.join(tx, "healthy"), "utf8")).trim());
-  assert.equal(
-    await fs.readFile(path.join(tx, "healthy.version"), "utf8"),
-    manifest.version,
-  );
-  updatedPID = Number(await fs.readFile(path.join(tx, "healthy.pid"), "utf8"));
-  assert.ok(updatedPID > 0);
-  const data = JSON.parse(
-    await fs.readFile(path.join(profile, "state.json"), "utf8"),
-  );
-  assert.equal(data.settings.name, "업데이트 보존 QA");
-  assert.equal(data.sealed, before.sealed);
-  assert.equal(data.settings.login, before.settings.login);
-  assert.equal(data.settings.receive, before.settings.receive);
-  if (deferred) assert.ok(data.peers.some(p => p.name === "Update-peer"));
-  console.log(
-    JSON.stringify({
-      from: actual.version,
-      to: manifest.version,
-      privateFeed: true,
-      profilePreserved: true,
-      deferredUntilDelivery: deferred,
-      healthy: true,
-    }),
-  );
+  }, file);
+  await client.call("vault-get", { peer: source.local.id, id: item.id, name: item.name });
+  await install.click();
+  await wait(async () => (await client.state()).update.later);
+  await delay(1500);
+  assert.equal((await client.state()).version, before.version);
+  await peer.app.evaluate(() => globalThis.finishUpdateTestTransfer());
+  const result = async () => {
+    if (await fs.stat(path.join(tx, "failed.txt")).catch(() => false)) return "rollback";
+    return await fs.stat(path.join(tx, "complete")).then(() => "complete", () => "waiting");
+  };
+  await expect.poll(result, { timeout: 145000, intervals: [500] }).not.toBe("waiting");
+  assert.equal(await result(), "complete");
+  updatedPid = Number(await fs.readFile(path.join(tx, "healthy.pid"), "utf8"));
+  assert.ok(Number.isSafeInteger(updatedPid) && updatedPid > 0);
+  assert.equal(await fs.readFile(path.join(tx, "healthy.version"), "utf8"), version);
+  const saved = JSON.parse(await fs.readFile(settingsFile, "utf8"));
+  assert.equal(saved.sealed, identity);
+  assert.equal(saved.settings.receive, inbox);
+  assert.ok(saved.peers.some(p => p.id === source.local.id));
+  assert.equal(await fs.readFile(path.join(inbox, "transfer.txt"), "utf8"), "업데이트 전 파일");
+  console.log("PASS", process.platform, assets ? "GitHub fixture" : "GitHub live", before.version, "→", version,
+    "전송 완료 후 설치, 실제 재시작, 등록·기기 ID·파일 보존");
 } finally {
-  if (peerFixture) await peerFixture.cleanup();
-  await browser?.close().catch(() => {});
-  if (previousProcess.exitCode === null) previousProcess.kill();
-  if (updatedPID) {
-    try {
-      process.kill(updatedPID);
-    } catch {}
-    await new Promise((r) => setTimeout(r, 1500));
+  if (updatedPid) {
+    try { process.kill(updatedPid); } catch (e) { if (e.code !== "ESRCH") throw e; }
+    await delay(1000);
   }
-  if (updatedPID)
-    await fs.rm(home, {
-      recursive: true,
-      force: true,
-      maxRetries: 8,
-      retryDelay: 250,
-    });
+  await cleanup();
 }

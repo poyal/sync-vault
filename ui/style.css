@@ -228,23 +228,6 @@ legend {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
-#dropzone {
-  border: 2px dashed #9ab8a5;
-  background: #eef5ef;
-  border-radius: 11px;
-  padding: 27px;
-  text-align: center;
-}
-#dropzone .tools {
-  justify-content: center;
-  margin-top: 12px;
-}
-#dropzone.hover {
-  background: #dbeede;
-}
-#selection {
-  margin-top: 14px;
-}
 #notice {
   background: #e1eedf;
   padding: 10px 14px;
@@ -283,4 +266,118 @@ progress {
 }
 #prefs .tools {
   margin-top: 14px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+  gap: 12px;
+}
+.device-card {
+  width: 100%;
+  display: flex;
+  gap: 17px;
+  align-items: center;
+  text-align: left;
+  padding: 19px 22px;
+  border-radius: 12px;
+  min-height: 100px;
+}
+.device-card strong {
+  display: block;
+  font-size: 21px;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+}
+.device-copy {
+  min-width: 0;
+}
+.chevron {
+  margin-left: auto;
+  font-size: 24px;
+  font-weight: 400;
+}
+.local-device {
+  background: #eaf2e9;
+  border-color: #acc2ae;
+}
+.computer {
+  position: relative;
+  width: 35px;
+  min-width: 35px;
+  height: 25px;
+  border: 2px solid #4d7862;
+  border-radius: 4px;
+  margin-bottom: 5px;
+}
+.computer::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  bottom: -7px;
+  background: #4d7862;
+}
+.device-group h3 {
+  font-size: 14px;
+  margin: 8px 0;
+  color: #587264;
+}
+#home h2 {
+  margin-top: 28px;
+}
+.back {
+  border: 0;
+  padding-left: 0;
+  background: transparent;
+}
+.switch {
+  display: flex;
+  border-bottom: 1px solid #cad8cc;
+  gap: 8px;
+}
+.switch button {
+  border: 0;
+  background: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px 15px;
+}
+.switch button[aria-pressed="true"] {
+  border-color: #245c47;
+  color: #245c47;
+  background: #e6efe7;
+}
+#room-tools {
+  margin: 16px 0;
+}
+.pair-card {
+  padding: 18px 22px;
+  background: #e8f2e9;
+  border: 1px solid #aac5b3;
+  border-radius: 12px;
+  margin: 12px 0;
+}
+.pair-code {
+  font:
+    700 clamp(19px, 3vw, 32px)/1.5 "Courier Prime",
+    monospace;
+  letter-spacing: 0.09em;
+  margin: 10px 0 16px;
+}
+button:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #b17632;
+  outline-offset: 3px;
+}
+
+.clip-thumb {
+  float: left;
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  margin-right: 12px;
+  border-radius: 5px;
+  background: #edf3ed;
 }

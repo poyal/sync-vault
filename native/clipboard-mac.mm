@@ -29,6 +29,14 @@ int main(int argc,char** argv){ @autoreleasepool {
             }
         }return 0;
     }
+    if(!strcmp(argv[1],"read-content")){
+        NSData *text=[[pb stringForType:NSPasteboardTypeString] dataUsingEncoding:NSUTF8StringEncoding];
+        NSData *html=[pb dataForType:NSPasteboardTypeHTML], *png=[pb dataForType:NSPasteboardTypePNG];
+        if(!png){NSData *tiff=[pb dataForType:NSPasteboardTypeTIFF];if(tiff && tiff.length<=64*1024*1024){NSBitmapImageRep *rep=[NSBitmapImageRep imageRepWithData:tiff]; if(rep && (double)rep.pixelsWide*rep.pixelsHigh<=48*1024*1024)png=[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];}}
+        if(text.length>2*1024*1024||html.length>2*1024*1024||png.length>32*1024*1024)return 4;
+        for(NSData *d in @[text?:[NSData data],html?:[NSData data],png?:[NSData data]]){number((uint32_t)d.length);if(d.length)fwrite(d.bytes,d.length,1,stdout);}
+        return 0;
+    }
     if(!strcmp(argv[1],"images")){
         if(pb.pasteboardItems.count<2)return 0;
         for(NSPasteboardItem *item in pb.pasteboardItems){
@@ -37,7 +45,7 @@ int main(int argc,char** argv){ @autoreleasepool {
             if(png){if(png.length>32*1024*1024)return 4;number((uint32_t)png.length);fwrite(png.bytes,png.length,1,stdout);}
         }return 0;
     }
-    if(!strcmp(argv[1],"content")){
+    if(!strcmp(argv[1],"content") || ([qa hasPrefix:@"SyncVaultQA-"] && !strcmp(argv[1],"qa-write"))){
         NSData *input=[[NSFileHandle fileHandleWithStandardInput] readDataToEndOfFile];
         id obj=[NSJSONSerialization JSONObjectWithData:input options:0 error:nil];
         if(![obj isKindOfClass:NSDictionary.class])return 5;
@@ -53,7 +61,7 @@ int main(int argc,char** argv){ @autoreleasepool {
                 [item setData:[html dataUsingEncoding:NSUTF8StringEncoding] forType:NSPasteboardTypeHTML];
             }
         }else return 5;
-        [item setString:@"1" forType:@"io.syncvault.remote"];
+        if(strcmp(argv[1],"qa-write"))[item setString:@"1" forType:@"io.syncvault.remote"];
         [pb prepareForNewContentsWithOptions:NSPasteboardContentsCurrentHostOnly];
         return [pb writeObjects:@[item]]?0:6;
     }

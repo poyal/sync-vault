@@ -78,9 +78,6 @@ await build({
   external: ["electron"],
   define: {
     __SYNC_VAULT_DEV__: JSON.stringify(development),
-    "process.env.SYNC_VAULT_FEED": JSON.stringify(
-      development ? "" : process.env.SYNC_VAULT_FEED || "",
-    ),
     "process.env.SYNC_VAULT_RELEASE_KEY": JSON.stringify(
       development ? "" : process.env.SYNC_VAULT_RELEASE_KEY ||
         (fs.existsSync("release-key.pub")
