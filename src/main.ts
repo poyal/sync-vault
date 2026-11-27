@@ -208,6 +208,29 @@ function status() {
 }
 async function initialize() {
   if (process.platform === "darwin") app.setActivationPolicy("accessory");
+  const pix = Buffer.alloc(32 * 32 * 4);
+  for (let y = 0; y < 32; y++)
+    for (let x = 0; x < 32; x++) {
+      const k = (y * 32 + x) * 4,
+        arrow =
+          (y >= 8 && y <= 11 && x >= 5 && x < 24) ||
+          (Math.abs(y - 10) + Math.abs(x - 23) < 7 && x >= 22) ||
+          (y >= 20 && y <= 23 && x > 8 && x < 27) ||
+          (Math.abs(y - 22) + Math.abs(x - 8) < 7 && x <= 9);
+      pix[k] = arrow ? 180 : 52;
+      pix[k + 1] = arrow ? 250 : 72;
+      pix[k + 2] = arrow ? 221 : 27;
+      pix[k + 3] = x < 2 || x > 29 || y < 2 || y > 29 ? 0 : 255;
+    }
+  const ico = nativeImage.createFromBitmap(pix, { width: 32, height: 32 });
+  tray = new Tray(ico.resize({ width: 18, height: 18 }));
+  tray.setToolTip(product);
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "기기 키 저장소 확인 중", enabled: false },
+    { type: "separator" },
+    { label: "종료", click: () => app.exit(0) },
+  ]));
+  if (process.platform === "win32") tray.on("click", show);
   const home = app.getPath("userData");
   store = new Store(home, app.getPath("downloads"));
   // Convert the previous Windows login entry when updating an enabled install.
@@ -445,25 +468,8 @@ async function initialize() {
   const loginStart = process.argv.includes(loginFlag) ||
     (process.platform === "darwin" && app.getLoginItemSettings().wasOpenedAtLogin);
   if (openRequested || !loginStart) win.show();
-  const pix = Buffer.alloc(32 * 32 * 4);
-  for (let y = 0; y < 32; y++)
-    for (let x = 0; x < 32; x++) {
-      const k = (y * 32 + x) * 4,
-        arrow =
-          (y >= 8 && y <= 11 && x >= 5 && x < 24) ||
-          (Math.abs(y - 10) + Math.abs(x - 23) < 7 && x >= 22) ||
-          (y >= 20 && y <= 23 && x > 8 && x < 27) ||
-          (Math.abs(y - 22) + Math.abs(x - 8) < 7 && x <= 9);
-      pix[k] = arrow ? 180 : 52;
-      pix[k + 1] = arrow ? 250 : 72;
-      pix[k + 2] = arrow ? 221 : 27;
-      pix[k + 3] = x < 2 || x > 29 || y < 2 || y > 29 ? 0 : 255;
-    }
-  const ico = nativeImage.createFromBitmap(pix, { width: 32, height: 32 });
   win.setIcon(ico);
-  tray = new Tray(ico.resize({ width: 18, height: 18 }));
   tray.setToolTip(product);
-  if (process.platform === "win32") tray.on("click", () => show());
   trayMenu();
   app.on("activate", show);
   let lockGeneration = 0;

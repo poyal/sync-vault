@@ -43,7 +43,12 @@ const files = await build({
       extraResources: [{ from: "artifacts/dev-native", to: "native" }],
       files: ["package.json", "!dist/**", { from: "artifacts/dev-runtime", to: "dist" }],
       artifactName: "SyncVault-Dev-" + version + "-" + target + ".${ext}",
-      mac: { extendInfo: { NSBonjourServices: ["_sync-vault-dev._tcp"] } },
+    }),
+    ...(mac && {
+      mac: {
+        ...(process.env.CSC_NAME && { identity: process.env.CSC_NAME }),
+        ...(dev && { extendInfo: { NSBonjourServices: ["_sync-vault-dev._tcp"] } }),
+      },
     }),
   },
 });
