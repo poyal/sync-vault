@@ -1,1 +1,2 @@
 *.sh text eol=lf
+release-key.pub text eol=lf

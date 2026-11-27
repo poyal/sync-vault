@@ -60,10 +60,7 @@ if (op === "init") {
         format: "der",
         type: "pkcs8",
       });
-  if (
-    createPublicKey(key).export({ format: "pem", type: "spki" }).trim() !==
-    fs.readFileSync(pub, "utf8").trim()
-  )
+  if (!createPublicKey(key).equals(createPublicKey(fs.readFileSync(pub))))
     throw Error("공개키가 일치하지 않습니다.");
   const platforms = {};
   for (const file of archives) {

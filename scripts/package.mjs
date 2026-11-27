@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 const mac = process.platform === "darwin",
   platform = mac ? Platform.MAC : Platform.WINDOWS;
 const arch = mac ? Arch.arm64 : Arch.x64;
@@ -17,6 +18,8 @@ if (!version || !/^\d+\.\d+\.\d+$/.test(version))
   throw Error("검증 후보 버전 x.y.z가 필요합니다.");
 const previous = process.argv.includes("--qa-previous");
 const target = mac ? "mac-arm64" : "win-x64";
+// Electron 44 installs its native runtime on first use, including after npm ci.
+createRequire(import.meta.url)("electron");
 const devDir = path.join("artifacts", "dev", randomUUID(), target);
 const qa = previous
   ? {
