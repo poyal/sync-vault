@@ -1,0 +1,1717 @@
+{
+  "platform": "darwin",
+  "run": "nov27-resident",
+  "status": "PASS",
+  "samples": [
+    {
+      "ms": 29,
+      "bytes": 491454464,
+      "cpu": null,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 5028,
+      "bytes": 479477760,
+      "cpu": 0.8000931708497456,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 10025,
+      "bytes": 479526912,
+      "cpu": 0.6003697377029644,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 15026,
+      "bytes": 479625216,
+      "cpu": 0.599879519117597,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 20029,
+      "bytes": 475561984,
+      "cpu": 0.7995655827461055,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 25035,
+      "bytes": 473415680,
+      "cpu": 2.7963149227978197,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 30034,
+      "bytes": 475414528,
+      "cpu": 0.6001581767288049,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 35029,
+      "bytes": 475742208,
+      "cpu": 1.0011132964506702,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 40027,
+      "bytes": 476200960,
+      "cpu": 0.8002692771672435,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 45031,
+      "bytes": 476381184,
+      "cpu": 0.5995615357325137,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 50028,
+      "bytes": 476708864,
+      "cpu": 0.8004647831524339,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 55026,
+      "bytes": 477036544,
+      "cpu": 1.0002436759635083,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 60028,
+      "bytes": 477052928,
+      "cpu": 0.5997896237894572,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 65028,
+      "bytes": 477052928,
+      "cpu": 0.5999874553422853,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 70033,
+      "bytes": 477052928,
+      "cpu": 0.599400898801648,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 75025,
+      "bytes": 476561408,
+      "cpu": 0.8013496330519865,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 80027,
+      "bytes": 476561408,
+      "cpu": 0.5996907144314948,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 85032,
+      "bytes": 476577792,
+      "cpu": 0.7992461045580592,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 90034,
+      "bytes": 476594176,
+      "cpu": 0.799761937423324,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 95029,
+      "bytes": 476889088,
+      "cpu": 1.0008934058615773,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 100026,
+      "bytes": 476119040,
+      "cpu": 0.40029503409239914,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 105034,
+      "bytes": 476233728,
+      "cpu": 0.5989611966798131,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 110035,
+      "bytes": 476774400,
+      "cpu": 0.7998412382328782,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 115034,
+      "bytes": 476872704,
+      "cpu": 1.0002087185543431,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 120034,
+      "bytes": 476872704,
+      "cpu": 0.6000647269418744,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 125036,
+      "bytes": 476872704,
+      "cpu": 0.5997493746921563,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 130030,
+      "bytes": 477167616,
+      "cpu": 0.8009835210974905,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 135034,
+      "bytes": 476397568,
+      "cpu": 0.599418344339342,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 140035,
+      "bytes": 476577792,
+      "cpu": 0.3999552383695699,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 145026,
+      "bytes": 477036544,
+      "cpu": 0.8014391844154155,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 150035,
+      "bytes": 477085696,
+      "cpu": 0.5988672575540183,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 155025,
+      "bytes": 476545024,
+      "cpu": 0.601312796078189,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 160026,
+      "bytes": 476741632,
+      "cpu": 0.7997243217508666,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 165028,
+      "bytes": 477118464,
+      "cpu": 0.5998457547028847,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 170026,
+      "bytes": 477478912,
+      "cpu": 0.8002256168907859,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 175036,
+      "bytes": 477659136,
+      "cpu": 0.7984197942105217,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 180040,
+      "bytes": 477790208,
+      "cpu": 0.799423482325404,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 185035,
+      "bytes": 477790208,
+      "cpu": 0.8006793431143735,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 190035,
+      "bytes": 476987392,
+      "cpu": 0.5999939751004996,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 195027,
+      "bytes": 476987392,
+      "cpu": 0.8013110583571181,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 200027,
+      "bytes": 477298688,
+      "cpu": 0.600069167932753,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 205035,
+      "bytes": 477347840,
+      "cpu": 0.5990537298161409,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 210034,
+      "bytes": 476790784,
+      "cpu": 0.600026441125171,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 215025,
+      "bytes": 477020160,
+      "cpu": 0.6011340644197057,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 220024,
+      "bytes": 477364224,
+      "cpu": 0.6000736190718363,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 225036,
+      "bytes": 476839936,
+      "cpu": 0.7982061514056368,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 230035,
+      "bytes": 477118464,
+      "cpu": 0.8000909170512167,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 235025,
+      "bytes": 477429760,
+      "cpu": 0.4008256071981321,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 240033,
+      "bytes": 476921856,
+      "cpu": 0.7986139256706037,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 245034,
+      "bytes": 477036544,
+      "cpu": 0.5999216252789985,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 250035,
+      "bytes": 477249536,
+      "cpu": 0.7999128694906892,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 255028,
+      "bytes": 477593600,
+      "cpu": 0.8010725091999333,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 260028,
+      "bytes": 477020160,
+      "cpu": 0.7999730341889745,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 265026,
+      "bytes": 477134848,
+      "cpu": 0.4001557906532016,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 270028,
+      "bytes": 477724672,
+      "cpu": 0.7996826726407563,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 275028,
+      "bytes": 477822976,
+      "cpu": 0.5999566381339815,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 280024,
+      "bytes": 477790208,
+      "cpu": 0.600521347652344,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 285034,
+      "bytes": 477790208,
+      "cpu": 0.7984773037816831,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 290035,
+      "bytes": 478068736,
+      "cpu": 0.5998502473857467,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 295029,
+      "bytes": 478216192,
+      "cpu": 0.6007462419354616,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 300026,
+      "bytes": 478429184,
+      "cpu": 0.8004980899240023,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 305025,
+      "bytes": 478920704,
+      "cpu": 1.6001049268805858,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 310029,
+      "bytes": 478756864,
+      "cpu": 0.7993633603211026,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 315030,
+      "bytes": 478838784,
+      "cpu": 0.7998624970778732,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 320034,
+      "bytes": 478183424,
+      "cpu": 0.7994073925848547,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 325026,
+      "bytes": 478380032,
+      "cpu": 0.6009649143145311,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 330024,
+      "bytes": 478724096,
+      "cpu": 0.40011953899325337,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 335031,
+      "bytes": 479117312,
+      "cpu": 1.7976162113421021,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 340025,
+      "bytes": 479133696,
+      "cpu": 0.6007184191012546,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 345033,
+      "bytes": 478642176,
+      "cpu": 0.7986573837808444,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 350028,
+      "bytes": 479019008,
+      "cpu": 0.8008437356447804,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 355025,
+      "bytes": 479019008,
+      "cpu": 0.6003111812659764,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 360025,
+      "bytes": 479019008,
+      "cpu": 0.6001082094719604,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 365028,
+      "bytes": 479346688,
+      "cpu": 1.798816348982029,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 370025,
+      "bytes": 479346688,
+      "cpu": 0.6003806013158803,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 375034,
+      "bytes": 479526912,
+      "cpu": 0.7984392840246302,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 380035,
+      "bytes": 479674368,
+      "cpu": 0.3999199193954683,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 385030,
+      "bytes": 479870976,
+      "cpu": 0.600651060700968,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 390035,
+      "bytes": 479936512,
+      "cpu": 0.5994436862869418,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 395029,
+      "bytes": 479477760,
+      "cpu": 1.6017500586593967,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 400034,
+      "bytes": 479477760,
+      "cpu": 0.599464233876476,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 405024,
+      "bytes": 479002624,
+      "cpu": 1.2022121101962018,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 410025,
+      "bytes": 479444992,
+      "cpu": 0.7998406851728301,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 415025,
+      "bytes": 479444992,
+      "cpu": 0.800011673450335,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 420024,
+      "bytes": 479117312,
+      "cpu": 0.40008424774046747,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 425026,
+      "bytes": 479592448,
+      "cpu": 1.7994435220908094,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 430025,
+      "bytes": 479821824,
+      "cpu": 0.6001404979317525,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 435024,
+      "bytes": 479854592,
+      "cpu": 0.6000801306200827,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 440025,
+      "bytes": 479182848,
+      "cpu": 0.5998729969286634,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 445026,
+      "bytes": 479395840,
+      "cpu": 0.5998857967414489,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 450034,
+      "bytes": 479723520,
+      "cpu": 0.5990059446032792,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 455029,
+      "bytes": 480133120,
+      "cpu": 2.0020126569578434,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 460034,
+      "bytes": 480313344,
+      "cpu": 0.599490508004515,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 465028,
+      "bytes": 480526336,
+      "cpu": 0.8008668247749017,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 470035,
+      "bytes": 480624640,
+      "cpu": 0.5991650984265824,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 475030,
+      "bytes": 479805440,
+      "cpu": 0.6006308175614429,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 480034,
+      "bytes": 479870976,
+      "cpu": 0.9991967040032267,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 485035,
+      "bytes": 480329728,
+      "cpu": 1.9993649684965549,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 490026,
+      "bytes": 480362496,
+      "cpu": 0.8014409106131954,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 495026,
+      "bytes": 480378880,
+      "cpu": 0.6000316516696236,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 500033,
+      "bytes": 479870976,
+      "cpu": 0.5991943182863966,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 505040,
+      "bytes": 480165888,
+      "cpu": 0.5992128739687582,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 510036,
+      "bytes": 480231424,
+      "cpu": 0.6004561665497249,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 515034,
+      "bytes": 480886784,
+      "cpu": 2.4009948723937207,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 520035,
+      "bytes": 480919552,
+      "cpu": 0.5998869612602844,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 525028,
+      "bytes": 481017856,
+      "cpu": 0.6007649190068461,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 530036,
+      "bytes": 481034240,
+      "cpu": 0.5991216876059607,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 535030,
+      "bytes": 481034240,
+      "cpu": 0.6006430984747361,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 540025,
+      "bytes": 481034240,
+      "cpu": 0.800833186847604,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 545028,
+      "bytes": 481869824,
+      "cpu": 1.7989997413919914,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 550024,
+      "bytes": 481869824,
+      "cpu": 0.6003945091453246,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 555026,
+      "bytes": 481869824,
+      "cpu": 0.3998534904023167,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 560030,
+      "bytes": 481869824,
+      "cpu": 0.5996153767166078,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 565025,
+      "bytes": 481427456,
+      "cpu": 0.8007154392449699,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 570025,
+      "bytes": 480641024,
+      "cpu": 0.6000345169855893,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 575035,
+      "bytes": 481329152,
+      "cpu": 1.5967379840539195,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 580032,
+      "bytes": 481345536,
+      "cpu": 0.6003093643883433,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 585025,
+      "bytes": 481558528,
+      "cpu": 0.8012241101955514,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 590028,
+      "bytes": 481640448,
+      "cpu": 0.5996666752785439,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 595034,
+      "bytes": 481001472,
+      "cpu": 0.7989693761645685,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 600033,
+      "bytes": 481427456,
+      "cpu": 1.0001381440811372,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 605035,
+      "bytes": 481525760,
+      "cpu": 0.19995181992939257,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 610033,
+      "bytes": 480919552,
+      "cpu": 0.20004067495057673,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 615026,
+      "bytes": 480919552,
+      "cpu": 0.200319726950815,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 620036,
+      "bytes": 480919552,
+      "cpu": 0.19959063461863033,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 625026,
+      "bytes": 481607680,
+      "cpu": 1.6031661730334565,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 630028,
+      "bytes": 481067008,
+      "cpu": 0.39982995903555973,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 635033,
+      "bytes": 481263616,
+      "cpu": 0.399619389146491,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 640028,
+      "bytes": 481640448,
+      "cpu": 0.8007065767927499,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 645028,
+      "bytes": 481820672,
+      "cpu": 0.6000446233984982,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 650035,
+      "bytes": 482131968,
+      "cpu": 0.5991406425108843,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 655034,
+      "bytes": 482361344,
+      "cpu": 0.8002473498938311,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 660025,
+      "bytes": 482361344,
+      "cpu": 0.6010098868897013,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 665033,
+      "bytes": 482050048,
+      "cpu": 1.5975381403679354,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 670025,
+      "bytes": 482033664,
+      "cpu": 0.8012470809880311,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 675025,
+      "bytes": 482263040,
+      "cpu": 0.6000507843380443,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 680025,
+      "bytes": 482279424,
+      "cpu": 0.399978877755437,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 685027,
+      "bytes": 482279424,
+      "cpu": 0.5997837929372306,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 690027,
+      "bytes": 482295808,
+      "cpu": 0.5999658969784776,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 695026,
+      "bytes": 482689024,
+      "cpu": 1.6003992330320287,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 700026,
+      "bytes": 482689024,
+      "cpu": 0.8000149202782687,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 705025,
+      "bytes": 482689024,
+      "cpu": 0.6000588856986347,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 710035,
+      "bytes": 482443264,
+      "cpu": 0.7983879683064085,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 715034,
+      "bytes": 482557952,
+      "cpu": 0.8001817812961718,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 720032,
+      "bytes": 482557952,
+      "cpu": 0.6002372087028793,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 725025,
+      "bytes": 483540992,
+      "cpu": 1.802692666893959,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 730024,
+      "bytes": 483721216,
+      "cpu": 0.800043782395978,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 735034,
+      "bytes": 483721216,
+      "cpu": 0.5988215392114741,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 740029,
+      "bytes": 483721216,
+      "cpu": 0.40041137600087884,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 745035,
+      "bytes": 483721216,
+      "cpu": 0.5993179911090628,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 750033,
+      "bytes": 483180544,
+      "cpu": 0.6002199455572027,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 755025,
+      "bytes": 483377152,
+      "cpu": 1.8028625400695562,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 760034,
+      "bytes": 483393536,
+      "cpu": 0.3992901220565013,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 765025,
+      "bytes": 483196928,
+      "cpu": 0.8013687310611471,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 770028,
+      "bytes": 483311616,
+      "cpu": 0.799671415015575,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 775034,
+      "bytes": 483328000,
+      "cpu": 0.5991939543459992,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 780035,
+      "bytes": 483344384,
+      "cpu": 0.5999253542877934,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 785028,
+      "bytes": 483688448,
+      "cpu": 1.802360190669677,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 790027,
+      "bytes": 483704832,
+      "cpu": 0.6001901452796221,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 795033,
+      "bytes": 483704832,
+      "cpu": 0.5992009404992379,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 800035,
+      "bytes": 483229696,
+      "cpu": 0.3998458627786118,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 805027,
+      "bytes": 483590144,
+      "cpu": 0.600967276904482,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 810028,
+      "bytes": 483049472,
+      "cpu": 0.7998666422340783,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 815029,
+      "bytes": 484229120,
+      "cpu": 1.7995660494036274,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 820026,
+      "bytes": 484474880,
+      "cpu": 0.6004127137325669,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 825024,
+      "bytes": 484474880,
+      "cpu": 0.600180404266525,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 830029,
+      "bytes": 483639296,
+      "cpu": 1.198953972606598,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 835029,
+      "bytes": 483639296,
+      "cpu": 0.3999793577053157,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 840041,
+      "bytes": 483901440,
+      "cpu": 0.7980503430606462,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 845038,
+      "bytes": 484343808,
+      "cpu": 1.8011528430068378,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 850034,
+      "bytes": 484360192,
+      "cpu": 0.6004718106372844,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 855033,
+      "bytes": 484147200,
+      "cpu": 0.8002200939750369,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 860025,
+      "bytes": 484196352,
+      "cpu": 0.40060388359417837,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 865025,
+      "bytes": 484212736,
+      "cpu": 0.5999678867188659,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 870029,
+      "bytes": 484212736,
+      "cpu": 0.7994917697976783,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 875026,
+      "bytes": 484589568,
+      "cpu": 1.6006891232389995,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 880025,
+      "bytes": 484605952,
+      "cpu": 0.6001394774557302,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 885025,
+      "bytes": 484622336,
+      "cpu": 0.6000752544775375,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 890034,
+      "bytes": 484343808,
+      "cpu": 0.5989006678757955,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 895026,
+      "bytes": 484458496,
+      "cpu": 0.6009185240346736,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 900026,
+      "bytes": 484458496,
+      "cpu": 0.8000347015051659,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 905027,
+      "bytes": 484442112,
+      "cpu": 0.399882088048327,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 910038,
+      "bytes": 484737024,
+      "cpu": 0.7983331004445928,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 915026,
+      "bytes": 484900864,
+      "cpu": 0.4009377432642742,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 920025,
+      "bytes": 485064704,
+      "cpu": 0.6000873227869439,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 925029,
+      "bytes": 485261312,
+      "cpu": 0.39973006228893526,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 930034,
+      "bytes": 485376000,
+      "cpu": 0.5994135087675287,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 935026,
+      "bytes": 484540416,
+      "cpu": 0.8012378523891073,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 940032,
+      "bytes": 484540416,
+      "cpu": 0.7989878023026599,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 945025,
+      "bytes": 484769792,
+      "cpu": 0.6008767443049774,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 950035,
+      "bytes": 484884480,
+      "cpu": 0.598823850076062,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 955033,
+      "bytes": 484229120,
+      "cpu": 0.6002159777560091,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 960035,
+      "bytes": 484409344,
+      "cpu": 0.5998285240207017,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 965026,
+      "bytes": 484835328,
+      "cpu": 0.8013331712658307,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 970029,
+      "bytes": 484900864,
+      "cpu": 0.7995905429561597,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 975033,
+      "bytes": 484311040,
+      "cpu": 0.39967367978955054,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 980027,
+      "bytes": 484491264,
+      "cpu": 0.6006522633090509,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 985029,
+      "bytes": 484851712,
+      "cpu": 0.5998312125353522,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 990025,
+      "bytes": 484311040,
+      "cpu": 0.6004750057532828,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 995026,
+      "bytes": 484524032,
+      "cpu": 0.7998236988612187,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1000035,
+      "bytes": 484687872,
+      "cpu": 0.5988716808379086,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1005028,
+      "bytes": 485228544,
+      "cpu": 1.6024962751115794,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1010025,
+      "bytes": 484900864,
+      "cpu": 0.8003862997243191,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1015026,
+      "bytes": 484900864,
+      "cpu": 0.3999379763388333,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1020035,
+      "bytes": 485031936,
+      "cpu": 0.5988817530187159,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1025025,
+      "bytes": 485392384,
+      "cpu": 0.6012175907948633,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1030028,
+      "bytes": 485474304,
+      "cpu": 0.3997839834409133,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1035025,
+      "bytes": 484966400,
+      "cpu": 0.6003250459961659,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1040026,
+      "bytes": 485130240,
+      "cpu": 0.5999456948355351,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1045025,
+      "bytes": 485425152,
+      "cpu": 0.6000591909186962,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1050025,
+      "bytes": 485621760,
+      "cpu": 0.6000481287803129,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1055025,
+      "bytes": 485785600,
+      "cpu": 0.4000055234362689,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1060025,
+      "bytes": 485949440,
+      "cpu": 0.3999996266403554,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1065027,
+      "bytes": 486047744,
+      "cpu": 0.7996319494044816,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1070035,
+      "bytes": 486047744,
+      "cpu": 0.5990529373228234,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1075026,
+      "bytes": 485212160,
+      "cpu": 0.4007367176678111,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1080034,
+      "bytes": 485212160,
+      "cpu": 0.5990295870447185,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1085036,
+      "bytes": 485490688,
+      "cpu": 0.7996536899781969,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1090035,
+      "bytes": 484950016,
+      "cpu": 0.600154554801739,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1095029,
+      "bytes": 485097472,
+      "cpu": 0.40044019389413266,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1100027,
+      "bytes": 485408768,
+      "cpu": 0.40017052266396946,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1105025,
+      "bytes": 485490688,
+      "cpu": 0.8003777917640665,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1110029,
+      "bytes": 484933632,
+      "cpu": 0.7992764615372552,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1115036,
+      "bytes": 485195776,
+      "cpu": 0.5991944330575697,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1120034,
+      "bytes": 485392384,
+      "cpu": 0.8002425735301013,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1125025,
+      "bytes": 484851712,
+      "cpu": 0.4007631297853346,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1130028,
+      "bytes": 485031936,
+      "cpu": 0.5996833572326298,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1135028,
+      "bytes": 485326848,
+      "cpu": 0.7998695145665483,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1140028,
+      "bytes": 485425152,
+      "cpu": 0.40004231119511946,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1145025,
+      "bytes": 484917248,
+      "cpu": 0.8004218689094516,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1150033,
+      "bytes": 485081088,
+      "cpu": 0.3993828137687493,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1155040,
+      "bytes": 485326848,
+      "cpu": 0.7988796179903289,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1160035,
+      "bytes": 485425152,
+      "cpu": 0.6005582288429917,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1165035,
+      "bytes": 484884480,
+      "cpu": 0.6000195257153805,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1170035,
+      "bytes": 485064704,
+      "cpu": 0.5999762958965276,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1175028,
+      "bytes": 485441536,
+      "cpu": 1.0013989627627222,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1180027,
+      "bytes": 485638144,
+      "cpu": 0.6001953535042841,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1185024,
+      "bytes": 485769216,
+      "cpu": 0.40018882581590487,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1190037,
+      "bytes": 485982208,
+      "cpu": 0.5985037704989461,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1195025,
+      "bytes": 486031360,
+      "cpu": 0.8019546909397245,
+      "count": 5,
+      "handles": null
+    },
+    {
+      "ms": 1200024,
+      "bytes": 485212160,
+      "cpu": 0.4000366800832711,
+      "count": 5,
+      "handles": null
+    }
+  ],
+  "sent": [
+    "QA-nov27-resident-M-soak-0.txt",
+    "QA-nov27-resident-M-soak-1.txt",
+    "QA-nov27-resident-M-soak-2.txt",
+    "QA-nov27-resident-M-soak-3.txt",
+    "QA-nov27-resident-M-soak-4.txt",
+    "QA-nov27-resident-M-soak-5.txt",
+    "QA-nov27-resident-M-soak-6.txt",
+    "QA-nov27-resident-M-soak-7.txt",
+    "QA-nov27-resident-M-soak-8.txt",
+    "QA-nov27-resident-M-soak-9.txt",
+    "QA-nov27-resident-M-soak-10.txt",
+    "QA-nov27-resident-M-soak-11.txt",
+    "QA-nov27-resident-M-soak-12.txt",
+    "QA-nov27-resident-M-soak-13.txt",
+    "QA-nov27-resident-M-soak-14.txt",
+    "QA-nov27-resident-M-soak-15.txt",
+    "QA-nov27-resident-M-soak-16.txt",
+    "QA-nov27-resident-M-soak-17.txt"
+  ],
+  "recoveryMs": null,
+  "memoryGrowthMiB": 7.34375,
+  "idleCpu": 0.6773005597829576
+}
