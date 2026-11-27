@@ -51,5 +51,40 @@ try {
   });
   assert.equal(await hidden(), true);
   assert.ok((await b.state()).peers.some(p => p.id === left.id));
-  console.log("PASS background requests, one notification per request, menu fallback and stale clicks");
+  await b.app.evaluate(({ Notification }) => { Notification.isSupported = () => false; });
+  await b.page.evaluate(() => {
+    window.qaLinks = [];
+    window.vault.onRequest(link => window.qaLinks.push(link));
+  });
+  const names = ["first.txt", "second.txt"];
+  for (const name of names) {
+    await a.call("drop", [await fixture("sender/" + name, name)]);
+    await a.call("send", right.id);
+    await job(b, name, "승인 대기");
+  }
+  const pending = (await b.state()).jobs.filter(j => j.state === "승인 대기");
+  assert.equal(pending.length, 2);
+  const menuCount = () => b.app.evaluate(() =>
+    globalThis.qaMenu.items.filter(i => i.label === "파일 수신 요청 열기").length);
+  await expect.poll(menuCount).toBe(2);
+  assert.equal(await hidden(), true);
+  assert.equal(await noticeCount(), 2);
+  for (let i = 0; i < names.length; i++) {
+    await b.app.evaluate(() => globalThis.qaMenu.items.find(item => item.label === "파일 수신 요청 열기").click());
+    await expect.poll(() => b.page.evaluate(() => window.qaLinks.length)).toBe(i + 1);
+    const link = await b.page.evaluate(() => window.qaLinks.at(-1));
+    const target = pending.find(j => j.id === link.id);
+    assert.equal(link.page, "transfers");
+    assert.ok(target, "menu must select a live request");
+    pending.splice(pending.indexOf(target), 1);
+    const op = i === 0 ? "cancel" : "accept";
+    await b.page.locator('#jobs [data-action="' + op + '"][data-value="' + link.id + '"]').click();
+    await job(a, target.name, i === 0 ? "취소" : "완료");
+    const dest = path.join(receive, target.name);
+    if (i === 0) await assert.rejects(fs.access(dest), { code: "ENOENT" });
+    else assert.equal(await fs.readFile(dest, "utf8"), target.name);
+    await b.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+    await expect.poll(menuCount).toBe(1 - i);
+  }
+  console.log("PASS one notification per request, stale clicks, and two independently resolved tray requests with notifications unavailable");
 } finally { await cleanup(); }

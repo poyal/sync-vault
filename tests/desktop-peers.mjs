@@ -4,11 +4,12 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
+import { closeApp } from "./quit.mjs";
 const base = await fs.mkdtemp(path.join(os.tmpdir(), "sync-vault-journey-"));
 const apps = new Set();
 const wait = async (f) =>
   expect.poll(f, { timeout: 16000, intervals: [100, 300] }).toBe(true);
-async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE, { desktopClipboard = false } = {}) {
+async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE, { desktopClipboard = false, configure = true } = {}) {
   const profile = path.join(base, label),
     env = {
       ...process.env,
@@ -45,7 +46,7 @@ async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE, { desktopClipb
   const call = (action, v) =>
     page.evaluate(([a, b]) => window.vault.call(a, b), [action, v]);
   const state = () => call("state");
-  await call("settings", { name: label, paused: true, updates: false });
+  if (configure) await call("settings", { name: label, paused: true, updates: false });
   return {
     app,
     page,
@@ -106,20 +107,7 @@ async function fixture(name, txt) {
   return f;
 }
 async function stopApps() {
-  const results = await Promise.allSettled([...apps].map(async a => {
-    const pid = await a.evaluate(() => process.pid);
-    let timer;
-    try {
-      await Promise.race([a.close(), new Promise((_, reject) => {
-        timer = setTimeout(() => reject(Error("QA 앱이 10초 안에 종료되지 않았습니다.")), 10000);
-      })]);
-    } catch (e) {
-      if (a.process().exitCode === null) {
-        try { process.kill(pid); } catch (killError) { if (killError.code !== "ESRCH") throw killError; }
-      }
-      throw e;
-    } finally { clearTimeout(timer); }
-  }));
+  const results = await Promise.allSettled([...apps].map(closeApp));
   const failed = results.find(r => r.status === "rejected");
   if (failed) throw failed.reason;
 }

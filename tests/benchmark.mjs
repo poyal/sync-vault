@@ -7,6 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import assert from "node:assert/strict";
 
 const [configFile, mode] = process.argv.slice(2);
+const order = process.argv.includes("--candidate-first") ? ["candidate", "baseline"] : ["baseline", "candidate"];
 assert.ok(configFile && ["--files-only", "--desktop"].includes(mode),
   "benchmark.mjs <local-config.json> --files-only|--desktop");
 const config = JSON.parse(await fs.readFile(configFile, "utf8"));
@@ -14,7 +15,7 @@ assert.match(config.macHost, /^[a-zA-Z0-9][a-zA-Z0-9.-]*$/);
 const run = randomUUID().slice(0, 8);
 const file = path.resolve("artifacts/performance", "compare-" + run + ".json");
 await fs.mkdir(path.dirname(file), { recursive: true });
-const report = { run, mode, status: "RUNNING", builds: {}, errors: [] };
+const report = { run, mode, order, startedAt: new Date().toISOString(), status: "RUNNING", builds: {}, errors: [] };
 const quote = s => "'" + s.replaceAll("'", "'\\''") + "'";
 const p95 = values => values.toSorted((a, b) => a - b)[Math.ceil(values.length * .95) - 1];
 function worker(side, exe, name) {
@@ -66,16 +67,19 @@ async function measure(build, executables) {
   const m = worker("mac", executables.mac, "QA-" + run + "-M");
   const stats = report.builds[build] = { discovery: { win: [], mac: [] }, directions: {} };
   try {
-    await Promise.all([w.call("info"), m.call("info")]);
+    const builds = await Promise.all([w.call("info"), m.call("info")]);
+    stats.hosts = builds.map(({ version, platform, arch, osRelease, product }) => ({ version, platform, arch, osRelease, product }));
     for (let i = 0; i < 20; i++) {
       const [wt, mt] = await Promise.all([w.call("discover", m.name), m.call("discover", w.name)]);
       stats.discovery.win.push(wt); stats.discovery.mac.push(mt);
+      if ((i + 1) % 5 === 0) await fs.writeFile(file, JSON.stringify(report, null, 2));
     }
+    console.log(build, "discovery p95 ms", p95(stats.discovery.win).toFixed(1), p95(stats.discovery.mac).toFixed(1));
     const [wi, mi] = await Promise.all([w.call("info"), m.call("info")]);
     await Promise.all([w.call("pair", mi), m.call("approve", wi.id)]);
     await Promise.all([w.call("ready", mi.id), m.call("ready", wi.id)]);
     for (const [direction, sender, receiver] of [["win-to-mac", w, m], ["mac-to-win", m, w]]) {
-      const d = stats.directions[direction] = { pasteMs: [], busyPasteMs: [], mibPerSecond: [], timeouts: 0 };
+      const d = stats.directions[direction] = { pasteMs: [], busyPasteMs: [], mibPerSecond: [], routes: [], timeouts: 0 };
       if (mode === "--desktop") {
         for (let i = 0; i < 100; i++) {
           try { d.pasteMs.push(await oneCopy(sender, receiver, "한글 😀 " + run + "-" + i + direction)); }
@@ -85,6 +89,7 @@ async function measure(build, executables) {
       for (let i = 0; i < 3; i++) {
         const name = direction + "-" + i + ".bin";
         const hash = await sender.call("prepareFile", name);
+        const [sourceBefore, targetBefore] = await Promise.all([sender.call("routes"), receiver.call("routes")]);
         const start = performance.now();
         await sender.call("sendFile", name);
         let finished = false;
@@ -100,19 +105,30 @@ async function measure(build, executables) {
         };
         const [end] = await Promise.all([received, load()]);
         d.mibPerSecond.push(256 / ((end - start) / 1000));
+        const [sourceAfter, targetAfter] = await Promise.all([sender.call("routes"), receiver.call("routes")]);
+        const direct = sourceAfter.chunks - sourceBefore.chunks;
+        const replies = targetAfter.replies - targetBefore.replies;
+        const route = direct === 64 ? "direct" : direct === 0 && replies >= 64 ? "return" : "mixed-or-unknown";
+        d.routes.push({ route, directChunks: direct, returnReplies: replies });
         await receiver.call("verifyFile", { name, hash });
         await sender.call("clearSource", name);
       }
       await fs.writeFile(file, JSON.stringify(report, null, 2));
+      console.log(build, direction, "MiB/s", d.mibPerSecond.map(n => n.toFixed(1)).join(", "));
     }
   } finally { await Promise.allSettled([w.stop(), m.stop()]); }
 }
 try {
-  for (const build of ["baseline", "candidate"]) await measure(build, config[build]);
+  for (const build of order) await measure(build, config[build]);
   const candidate = report.builds.candidate;
+  if (mode === "--desktop")
+    for (const [dir, d] of Object.entries(report.builds.baseline.directions))
+      assert.equal(d.pasteMs.length, 100, "baseline " + dir + " paste failures");
   for (const samples of Object.values(candidate.discovery)) assert.ok(p95(samples) <= 5000, "discovery p95");
   for (const [dir, d] of Object.entries(candidate.directions)) {
     const median = x => x.toSorted((a, b) => a - b)[1];
+    const routes = new Set([...d.routes, ...report.builds.baseline.directions[dir].routes].map(r => r.route));
+    assert.ok(routes.size === 1 && !routes.has("mixed-or-unknown"), dir + " requires matching transport paths");
     assert.ok(median(d.mibPerSecond) >= .8 * median(report.builds.baseline.directions[dir].mibPerSecond), dir + " throughput");
     if (mode === "--desktop") {
       assert.equal(d.pasteMs.length, 100, dir + " paste failures");
@@ -122,4 +138,8 @@ try {
   }
   report.status = "PASS";
 } catch (e) { report.status = "FAIL"; report.errors.push(String(e)); throw e; }
-finally { await fs.writeFile(file, JSON.stringify(report, null, 2)); console.log(file, report.status); }
+finally {
+  report.finishedAt = new Date().toISOString();
+  await fs.writeFile(file, JSON.stringify(report, null, 2));
+  console.log(file, report.status);
+}

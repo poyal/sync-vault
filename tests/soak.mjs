@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
+import { stopApps } from "./desktop-peers.mjs";
 const run = promisify(execFile);
 const median = a => a.toSorted((x, y) => x - y)[Math.floor(a.length / 2)];
 
@@ -121,6 +122,9 @@ export async function soak(d, peer, receive, base, token) {
     assert.ok(!win || restored > 0 && restored <= 15000);
     assert.ok(report.memoryGrowthMiB <= 32, "resident memory growth: " + report.memoryGrowthMiB);
     assert.ok(report.idleCpu <= 2, "idle CPU: " + report.idleCpu);
+    const quitStart = performance.now();
+    await stopApps();
+    report.quitMs = Math.round(performance.now() - quitStart);
     report.status = "PASS";
   } catch (e) {
     report.status = "FAIL";

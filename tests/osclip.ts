@@ -160,7 +160,6 @@ async function main() {
       nativeImage.createFromBuffer(Buffer.from(pastedImage.png)).toBitmap(),
       image.toBitmap(),
     );
-    editor.destroy();
     const root = path.join(home, "image-cache"), stale = path.join(root, randomUUID()),
       referenced = path.join(root, randomUUID()), recent = path.join(root, randomUUID());
     for (const dir of [stale, referenced, recent]) {
@@ -191,6 +190,7 @@ async function main() {
         expiredCachePrunedWithActiveFilesRetained: true,
       }),
     );
+    editor.destroy();
     app.exit(0);
   } finally {
     clips.stop();

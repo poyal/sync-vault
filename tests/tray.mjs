@@ -8,6 +8,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
+import { closeApp } from "./quit.mjs";
 
 const home = await fs.mkdtemp(path.join(os.tmpdir(), "sync-vault-tray-"));
 const executable = process.env.SYNC_VAULT_QA_EXE || createRequire(import.meta.url)("electron");
@@ -31,7 +32,7 @@ async function watchers(pid) {
 }
 let app;
 const again = () => new Promise((resolve, reject) => {
-  const child = spawn(executable, args, { env, stdio: "ignore", windowsHide: true });
+  const child = spawn(executable, args, { env, stdio: "ignore", windowsHide: true, timeout: 10000 });
   child.once("error", reject);
   child.once("exit", code => code === 0 ? resolve() : reject(Error("second launch " + code)));
 });
@@ -75,7 +76,7 @@ try {
   const start = performance.now();
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].webContents.executeJavaScript("window.vault.call('settings', {text:false})"));
-  await app.close();
+  await closeApp(app);
   app = undefined;
   assert.ok(performance.now() - start <= 10000, "quit exceeded 10 s");
   assert.deepEqual(await watchers(pid), []);
@@ -87,6 +88,6 @@ try {
   assert.equal(listening, false);
   console.log("PASS", process.platform, state.product, "login argument, 30 close/reopen cycles, renderer recovery, quit and port release");
 } finally {
-  await app?.close().catch(() => {});
+  if (app && app.process().exitCode === null) await closeApp(app).catch(() => {});
   await fs.rm(home, { recursive: true, force: true, maxRetries: 6, retryDelay: 200 });
 }

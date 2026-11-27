@@ -15,11 +15,15 @@ Windows 11 x64와 Apple Silicon Mac에서 같은 소스를 사용합니다. 릴�
 | `node scripts/test-osclip.mjs` | Windows 전용 스테이션에서 한글·HTML·투명도, 민감 표시·일시 중지·잠금 플래그, 실제 Chromium 붙여넣기 확인. 다음 실기기 시험용 스테이션 도구도 생성 |
 | `npm run test:e2e:desktop -- <공통실행ID> --soak` | 양쪽 OS에서 같은 ID로 시작. 실기기 자동 발견·등록, 동시 수신 승인, 창을 닫고 원본 파일 두 개를 자동 전송한 뒤 20분 연속 시험 |
 | `node tests/native-tray.mjs` | Windows 알림 영역 또는 Mac 메뉴 막대의 실제 메뉴에서 공유 재개·중지·열기·종료. UI Automation 또는 macOS 손쉬운 사용 접근이 가능한 로그인 세션에서 실행 |
+| `node tests/native-tray.mjs --menu-callbacks` | 같은 설치본의 메뉴 항목에 연결된 네 명령을 호출하고 상태·창·프로세스 결과를 확인합니다. OS가 아이콘 클릭을 전달했는지는 위의 실메뉴 시험에서 판정합니다. |
+| `node tests/installed-channels.mjs <정식실행파일> <개발실행파일>` | 정식판과 개발판을 전용 프로필로 동시에 실행합니다. 초기 수신 경로와 공유 설정, 양방향 직접 등록 거절, 개발판 업데이트 차단, 정식판 재실행 후 기기 ID·설정 보존을 확인합니다. |
 | `npm run test:perf -- <로컬설정.json> --desktop` | 상대 편집기 붙여넣기와 전송 중 지연, 버전 간 처리량 비교. [성능 기준](performance.md) 참조 |
 
 실기기 명령에는 `SYNC_VAULT_QA_EXE`로 설치한 실행 파일 절대 경로, `SYNC_VAULT_QA_PHYSICAL=1`을 지정합니다. Windows에서는 `Sync Vault Dev.exe`, Mac에서는 앱 내부의 `Contents/MacOS/Sync Vault Dev`입니다. 먼저 양쪽에서 `npm run build`를 실행해 네이티브 검사 도구를 준비합니다. `test:tray` 단독 검사는 해당 OS의 루프백 프로필로 실행합니다.
 
 기본 LAN 시험은 전용 Windows 스테이션과 이름 있는 macOS pasteboard에 합성 파일을 씁니다. 페어링 확인 대화상자를 자동 응답하고 수신 내용을 디스크에서 독립적으로 읽습니다. macOS 자동화의 모의 키체인 사용 여부도 결과에 적습니다.
+
+공존 시험에 `--login-item`을 붙이면 시험용 Dev 앱을 OS 로그인 항목에 등록한 뒤 해제하고 양쪽 상태를 조회합니다. 시작 시 이미 등록된 앱은 이 단계에서 중단합니다. 실제 재로그인 시험은 별도 계정에서 수행합니다.
 
 ## 실기기에서 기록할 시나리오
 

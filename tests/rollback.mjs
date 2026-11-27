@@ -6,6 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 const win = process.platform === "win32";
+const swapScript = path.resolve(process.argv[2] || (win ? "ui/swap.ps1" : "ui/swap.sh"));
 const home = await fs.mkdtemp(path.join(os.tmpdir(), "sv-rollback-"));
 const target = path.join(home, win ? "Sync Vault" : "Sync Vault.app");
 const container = path.join(home, ".syncvault-update-fixture");
@@ -56,7 +57,7 @@ try {
           "-NoProfile",
           "-NonInteractive",
           "-File",
-          path.resolve("ui/swap.ps1"),
+          swapScript,
           "-ParentPid",
           "2147483647",
           "-Target",
@@ -77,7 +78,7 @@ try {
     : spawnSync(
         "/bin/sh",
         [
-          path.resolve("ui/swap.sh"),
+          swapScript,
           "2147483647",
           target,
           replacement,

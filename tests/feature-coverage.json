@@ -1,8 +1,8 @@
 [
   {"feature":"창·트레이·알림·로그인","actions":["state","dismiss"],"tests":["tray.mjs","native-tray.mjs","background-requests.mjs"],"desktop":["실제 로그아웃·로그인","알림 차단과 실제 알림 클릭"]},
   {"feature":"발견·등록·권한 철회","actions":["refresh","pair","approve","deny","forget","autoaccept"],"tests":["core.ts","user-journeys.mjs","lan-desktops.mjs","benchmark.mjs"],"desktop":["물리 절전·Wi-Fi 변경","로컬 네트워크 권한 거부"]},
-  {"feature":"클립보드·형식·순서","actions":["save-image"],"tests":["native.mjs","osclip.ts","liveclip.ts","lan-desktops.mjs","benchmark-peer.mjs"],"desktop":["Finder·탐색기·Office 붙여넣기","PNG 저장 대화상자 성공·취소","실제 잠금·해제"]},
+  {"feature":"클립보드·형식·순서","actions":["save-image"],"tests":["native.mjs","osclip.ts","settings-journeys.mjs","liveclip.ts","lan-desktops.mjs","benchmark-peer.mjs"],"desktop":["Finder·탐색기·Office 붙여넣기","PNG 저장 대화상자 성공·취소","실제 잠금·해제"]},
   {"feature":"파일 선택·승인·취소·복구","actions":["dialog-files","dialog-folders","drop","clear","send","job"],"tests":["core.ts","large.ts","user-journeys.mjs","storage-journeys.mjs","soak.mjs"],"desktop":["네이티브 드래그·폴더 선택","실제 외장 매체 분리"]},
-  {"feature":"환경설정·프로필·초기화","actions":["settings","folder","defaults","reset"],"tests":["desktop.mjs","user-journeys.mjs","mac-install-cycle.mjs"],"desktop":["등록 초기화 승인·취소","기존 정식판과 개발판 설치·제거"]},
+  {"feature":"환경설정·프로필·초기화","actions":["settings","folder","defaults","reset"],"tests":["desktop.mjs","settings-journeys.mjs","user-journeys.mjs","mac-install-cycle.mjs","installed-channels.mjs"],"desktop":["등록 초기화 승인·취소","기존 정식판과 개발판 설치·제거"]},
   {"feature":"사설 배포·업데이트·롤백","actions":["check","download","cancel-update","update-now","update-later"],"tests":["core.ts","lan-release.mjs","upgrade.mjs","rollback.mjs","mixed-versions.mjs"],"desktop":["정식 설치본 업그레이드·복구"] }
 ]

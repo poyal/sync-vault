@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { _electron as electron } from "@playwright/test";
 import { createRequire } from "node:module";
@@ -32,10 +33,17 @@ async function hashFile(file) {
   return hash.digest("hex");
 }
 const commands = {
-  async info() { return (await app.state()).local; },
+  async info() {
+    const state = await app.state();
+    return { ...state.local, version: state.version, platform: process.platform,
+      arch: process.arch, osRelease: os.release(), product: await app.app.evaluate(({ app }) => app.getName()) };
+  },
   async discover(name) {
     await app.call("settings", { adapter: "SyncVaultQA-offline" });
-    await until(async () => !(await app.state()).local.address, 5000);
+    await until(async () => {
+      const state = await app.state();
+      return !state.local.address && !state.nearby.some(p => p.name === name);
+    }, 5000);
     const begin = performance.now();
     await app.call("settings", { adapter: "" });
     await until(async () => (await app.state()).nearby.some(p => p.name === name), 20000);
@@ -52,6 +60,14 @@ const commands = {
     await app.call("autoaccept", { id, value: true });
     await app.call("settings", { paused: !desktop, files: false, text: desktop, image: desktop });
     await app.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+    await app.app.evaluate(() => {
+      globalThis.qaRoutes = { chunks: 0, replies: 0 };
+      process.getBuiltinModule("node:diagnostics_channel").channel("http.client.request.start")
+        .subscribe(({ request }) => {
+          if (/^\/part\/[^/]+\/\d+\/\d+$/.test(request.path)) globalThis.qaRoutes.chunks++;
+          if (request.path === "/return/reply") globalThis.qaRoutes.replies++;
+        });
+    });
     if (desktop) {
       editor = await electron.launch({ executablePath: createRequire(import.meta.url)("electron"),
         args: [path.resolve("tests/benchmark-editor.cjs"), "--user-data-dir=" + path.join(base, "editor")] });
@@ -63,6 +79,7 @@ const commands = {
       }));
     }
   },
+  async routes() { return app.app.evaluate(() => globalThis.qaRoutes); },
   async copy(value) {
     await page.locator("#edit").evaluate((el, value) => {
       const bold = document.createElement("b");
