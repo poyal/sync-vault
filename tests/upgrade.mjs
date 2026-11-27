@@ -65,7 +65,7 @@ let peerFixture;
 try {
   await page.locator("#myip").filter({ hasText: /:\d+/ }).waitFor();
   const actual = await page.evaluate(() => window.vault.call("state"));
-  await fs.access(path.join(profile, "state.json"));
+  const before = JSON.parse(await fs.readFile(path.join(profile, "state.json"), "utf8"));
   assert.notEqual(actual.version, manifest.version);
   await page.evaluate(
     (folder) =>
@@ -145,6 +145,10 @@ try {
     await fs.readFile(path.join(profile, "state.json"), "utf8"),
   );
   assert.equal(data.settings.name, "업데이트 보존 QA");
+  assert.equal(data.sealed, before.sealed);
+  assert.equal(data.settings.login, before.settings.login);
+  assert.equal(data.settings.receive, before.settings.receive);
+  if (deferred) assert.ok(data.peers.some(p => p.name === "Update-peer"));
   console.log(
     JSON.stringify({
       from: actual.version,

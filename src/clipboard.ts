@@ -10,7 +10,13 @@ import { Store } from "./store";
 const mark = "web application/x-sync-vault-origin";
 type Snap = { seq: number; flag: number; paths: string[] };
 export class Clips {
-  locked = false;
+  private screenLocked = false;
+  private epoch = 0;
+  get locked() { return this.screenLocked; }
+  set locked(value: boolean) {
+    if (value !== this.screenLocked) this.epoch++;
+    this.screenLocked = value;
+  }
   last = -1;
   private child?: ChildProcess;
   private tail: Promise<unknown> = Promise.resolve();
@@ -96,6 +102,7 @@ export class Clips {
     return !this.locked && !this.store.state.settings.paused && !this.stopped;
   }
   private async capture() {
+    const epoch = this.epoch;
     const s = await this.snap();
     if (s.seq === this.last) return;
     this.last = s.seq;
@@ -123,7 +130,7 @@ export class Clips {
       return;
     }
     const items = await clipboard.read();
-    if ((await this.snap()).seq !== s.seq) return;
+    if ((await this.snap()).seq !== s.seq || !this.enabled || epoch !== this.epoch) return;
     if (items.some((i) => i.types.includes(mark))) return;
     const imgs: Buffer[] = [];
     if (config.image) {
@@ -156,7 +163,7 @@ export class Clips {
           );
         }
     }
-    if ((await this.snap()).seq !== s.seq) return;
+    if ((await this.snap()).seq !== s.seq || !this.enabled || epoch !== this.epoch) return;
     if (imgs.length > 1) {
       const folder = path.join(this.store.home, "image-cache", randomUUID());
       await fs.mkdir(folder, { recursive: true, mode: 0o700 });
@@ -190,7 +197,7 @@ export class Clips {
         else html += cleanHTML(await blob.text());
       }
     }
-    if ((text || html) && (await this.snap()).seq === s.seq)
+    if ((text || html) && (await this.snap()).seq === s.seq && this.enabled && epoch === this.epoch)
       void this.send(
         clipSchema.parse({
           kind: "text",
@@ -260,6 +267,7 @@ export class Clips {
     });
   }
   async resetBaseline() {
+    this.epoch++;
     await this.enqueue(async () => {
       this.last = (await this.snap()).seq;
     });

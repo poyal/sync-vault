@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
+import { soak } from "./soak.mjs";
 import {
   base,
   launch,
@@ -135,6 +136,10 @@ try {
   const localFiles = await Promise.all(
     ["a", "b"].map((n) => fixture(self + "-" + n + ".txt", self + n)),
   );
+  const peer = (await d.state()).peers.find(p => p.name === remote);
+  await d.call("autoaccept", { id: peer.id, value: true });
+  await d.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  assert.equal(await d.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
   async function checkAuto() {
     const helper = path.resolve(
       "out/native",
@@ -190,6 +195,7 @@ try {
     process.platform,
     "two automatic clipboard files, OS pasteboard paths and original byte contents",
   );
+  if (process.argv.includes("--soak")) await soak(d, peer, receive, base, token);
   await new Promise((r) => setTimeout(r, 2000));
 } finally {
   await cleanup();

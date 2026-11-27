@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { build } from "esbuild";
-const out = path.resolve("out/native");
 const development = process.argv.includes("--dev");
+const out = path.resolve(development ? "artifacts/dev-native" : "out/native");
 const dist = development ? "artifacts/dev-runtime" : "dist";
 fs.mkdirSync(out, { recursive: true });
 if (process.platform === "win32") {

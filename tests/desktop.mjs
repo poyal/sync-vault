@@ -2,6 +2,7 @@ import { _electron as electron } from "playwright";
 import { strict as assert } from "node:assert";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
@@ -15,6 +16,7 @@ async function launch() {
     ...process.env,
     SYNC_VAULT_TEST_HOME: home,
     SYNC_VAULT_TEST_LOOPBACK: "1",
+    SYNC_VAULT_QA_STATION: "SyncVaultQA-" + randomUUID(),
   };
   delete env.ELECTRON_RUN_AS_NODE;
   return electron.launch({

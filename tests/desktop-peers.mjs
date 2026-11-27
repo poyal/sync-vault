@@ -8,7 +8,7 @@ const base = await fs.mkdtemp(path.join(os.tmpdir(), "sync-vault-journey-"));
 const apps = new Set();
 const wait = async (f) =>
   expect.poll(f, { timeout: 16000, intervals: [100, 300] }).toBe(true);
-async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE) {
+async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE, { desktopClipboard = false } = {}) {
   const profile = path.join(base, label),
     env = {
       ...process.env,
@@ -18,6 +18,7 @@ async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE) {
       SYNC_VAULT_QA_STATION: "SyncVaultQA-" + randomUUID(),
     };
   delete env.ELECTRON_RUN_AS_NODE;
+  if (desktopClipboard) delete env.SYNC_VAULT_QA_STATION;
   const app = await electron.launch({
     executablePath: exe || createRequire(import.meta.url)("electron"),
     args: [

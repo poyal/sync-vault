@@ -8,6 +8,7 @@ import {
 import { strict as assert } from "node:assert";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { Store } from "../src/store";
 import { Clips } from "../src/clipboard";
 async function main() {
@@ -160,6 +161,23 @@ async function main() {
       image.toBitmap(),
     );
     editor.destroy();
+    const root = path.join(home, "image-cache"), stale = path.join(root, randomUUID()),
+      referenced = path.join(root, randomUUID()), recent = path.join(root, randomUUID());
+    for (const dir of [stale, referenced, recent]) {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, "Image-1.png"), png);
+    }
+    const old = new Date(Date.now() - 2 * 86400000);
+    await fs.utimes(stale, old, old);
+    await fs.utimes(referenced, old, old);
+    store.state.outgoing.push({
+      id: randomUUID(), peer, state: "대기", error: "", done: 0, total: png.length,
+      entries: [{ name: "Image-1.png", source: path.join(referenced, "Image-1.png"),
+        modified: old.getTime(), size: png.length, hash: "", dir: false }],
+    });
+    await clips.pruneImages();
+    await assert.rejects(fs.access(stale), { code: "ENOENT" });
+    for (const dir of [recent, referenced]) assert.deepEqual(await fs.readFile(path.join(dir, "Image-1.png")), png);
     await fs.writeFile(
       path.join(home, "result.json"),
       JSON.stringify({
@@ -170,6 +188,7 @@ async function main() {
         pausedLockedPrivateExcluded: true,
         chromiumPaste: true,
         concurrentStampOrder: true,
+        expiredCachePrunedWithActiveFilesRetained: true,
       }),
     );
     app.exit(0);

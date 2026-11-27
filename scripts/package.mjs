@@ -7,7 +7,11 @@ import { execFileSync } from "node:child_process";
 const mac = process.platform === "darwin",
   platform = mac ? Platform.MAC : Platform.WINDOWS;
 const arch = mac ? Arch.arm64 : Arch.x64;
-const version = JSON.parse(await fs.readFile("package.json", "utf8")).version;
+const baseVersion = JSON.parse(await fs.readFile("package.json", "utf8")).version;
+const candidateIndex = process.argv.indexOf("--qa-candidate");
+const candidate = candidateIndex !== -1;
+const version = candidate ? process.argv[candidateIndex + 1] : baseVersion;
+if (!version || !/^\d+\.\d+\.\d+$/.test(version)) throw Error("검증 후보 버전 x.y.z가 필요합니다.");
 const previous = process.argv.includes("--qa-previous");
 const dev = process.argv.includes("--dev");
 const target = mac ? "mac-arm64" : "win-x64";
@@ -17,10 +21,13 @@ const qa = previous
       extraMetadata: { version: "0.0.9" },
       directories: { output: "artifacts/previous" },
     }
-  : {};
+  : candidate ? {
+    extraMetadata: { version },
+    directories: { output: path.join("artifacts", "update-candidates", randomUUID()) },
+  } : {};
 const files = await build({
   targets: platform.createTarget(
-    previous ? ["dir"] : dev ? [mac ? "dmg" : "nsis"] : [mac ? "dmg" : "nsis", "zip"],
+    previous ? ["dir"] : candidate ? ["zip"] : dev ? [mac ? "dmg" : "nsis"] : [mac ? "dmg" : "nsis", "zip"],
     arch,
   ),
   publish: "never",
@@ -33,6 +40,7 @@ const files = await build({
       productName: "Sync Vault Dev",
       extraMetadata: { name: "sync-vault-dev", version: version + "-dev" },
       directories: { output: devDir },
+      extraResources: [{ from: "artifacts/dev-native", to: "native" }],
       files: ["package.json", "!dist/**", { from: "artifacts/dev-runtime", to: "dist" }],
       artifactName: "SyncVault-Dev-" + version + "-" + target + ".${ext}",
       mac: { extendInfo: { NSBonjourServices: ["_sync-vault-dev._tcp"] } },

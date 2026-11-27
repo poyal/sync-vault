@@ -1,7 +1,8 @@
 import { _electron as electron, expect } from "@playwright/test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -15,6 +16,19 @@ if (process.platform === "darwin") args.push("--use-mock-keychain");
 const env = { ...process.env, SYNC_VAULT_TEST_HOME: home, SYNC_VAULT_TEST_LOOPBACK: "1",
   SYNC_VAULT_QA_STATION: "SyncVaultQA-" + randomUUID() };
 delete env.ELECTRON_RUN_AS_NODE;
+const run = promisify(execFile);
+async function watchers(pid) {
+  assert.ok(Number.isSafeInteger(pid) && pid > 0);
+  if (process.platform === "win32") {
+    const query = "Get-CimInstance Win32_Process -Filter \"ParentProcessId=" + pid +
+      " AND Name='clipboard.exe'\" | Where-Object { $_.CommandLine -match 'watch\\s+" + pid + "$' } | ForEach-Object ProcessId";
+    const { stdout } = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", query], { windowsHide: true });
+    return stdout.trim().split(/\s+/).filter(Boolean).map(Number);
+  }
+  const { stdout } = await run("ps", ["-axo", "pid=,ppid=,command="]);
+  return stdout.split("\n").map(line => /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(line))
+    .filter(m => m && Number(m[2]) === pid && m[3].endsWith("/clipboard watch " + pid)).map(m => Number(m[1]));
+}
 let app;
 const again = () => new Promise((resolve, reject) => {
   const child = spawn(executable, args, { env, stdio: "ignore", windowsHide: true });
@@ -28,12 +42,22 @@ try {
   const state = await page.evaluate(() => window.vault.call("state"));
   await expect.poll(() => page.evaluate(async () => (await window.vault.call("state")).local.port)).toBeGreaterThan(0);
   assert.equal(await visible(), 0);
+  if (process.platform === "darwin") assert.equal(await app.evaluate(({ app }) => app.dock.isVisible()), false);
   const port = (await page.evaluate(() => window.vault.call("state"))).local.port;
+  const pid = app.process().pid;
+  await expect.poll(() => watchers(pid), { timeout: 10000 }).toHaveLength(1);
+  const [originalWatcher] = await watchers(pid);
+  process.kill(originalWatcher);
+  await expect.poll(async () => {
+    const list = await watchers(pid);
+    return list.length === 1 && list[0] !== originalWatcher;
+  }, { timeout: 12000 }).toBe(true);
   for (let i = 0; i < 30; i++) {
     await again();
     await expect.poll(visible).toBe(1);
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
     assert.equal(await visible(), 0);
+    if (process.platform === "darwin") assert.equal(await app.evaluate(({ app }) => app.dock.isVisible()), false);
   }
   // Kill only the renderer belonging to this disposable test instance.
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer());
@@ -51,6 +75,7 @@ try {
   await app.close();
   app = undefined;
   assert.ok(performance.now() - start <= 10000, "quit exceeded 10 s");
+  assert.deepEqual(await watchers(pid), []);
   const listening = await new Promise(resolve => {
     const s = net.connect(port, "127.0.0.1");
     s.once("connect", () => { s.destroy(); resolve(true); });

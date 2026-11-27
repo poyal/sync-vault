@@ -105,7 +105,7 @@ function updateRequests() {
     if (waiting.has(key)) continue;
     waiting.set(key, undefined);
     changed = true;
-    if (win?.isVisible() && win.isFocused() || !Notification.isSupported()) continue;
+    if ((win?.isVisible() && win.isFocused()) || !Notification.isSupported()) continue;
     const n = new Notification({ title: product, body: link.page === "devices"
       ? "기기 등록 요청이 있습니다." : "파일 수신 요청이 있습니다." });
     n.on("click", () => { if (pendingRequests().has(key)) navigateTo(link); });
@@ -130,6 +130,7 @@ function change() {
 function show() {
   openRequested = true;
   if (!win || win.isDestroyed()) return;
+  if (process.platform === "darwin" && !app.dock?.isVisible()) void app.dock?.show();
   if (win.webContents.isCrashed()) win.reload();
   if (win.isMinimized()) win.restore();
   win.show();
@@ -208,9 +209,12 @@ async function initialize() {
   const home = app.getPath("userData");
   store = new Store(home, app.getPath("downloads"));
   // Convert the previous Windows login entry when updating an enabled install.
-  if (app.isPackaged && process.platform === "win32" && store.state.settings.login &&
-      app.getLoginItemSettings().openAtLogin && !app.getLoginItemSettings(loginOptions).openAtLogin)
-    app.setLoginItemSettings({ ...loginOptions, openAtLogin: true });
+  if (app.isPackaged && process.platform === "win32" && store.state.settings.login) {
+    const legacy = app.getLoginItemSettings();
+    if (legacy.openAtLogin && legacy.executableWillLaunchAtLogin &&
+        !app.getLoginItemSettings(loginOptions).openAtLogin)
+      app.setLoginItemSettings({ ...loginOptions, openAtLogin: true });
+  }
   if (!(await safeStorage.isAsyncEncryptionAvailable()))
     throw Error(
       "OS 키 저장소에 접근할 수 없습니다. 로그인 키체인 또는 Windows 계정을 확인하세요.",
@@ -418,6 +422,7 @@ async function initialize() {
     if (!quitting) {
       e.preventDefault();
       win?.hide();
+      if (process.platform === "darwin") app.dock?.hide();
     }
   });
   win.webContents.on("did-finish-load", () => {
@@ -438,7 +443,10 @@ async function initialize() {
   await win.loadFile(path.join(__dirname, "ui", "index.html"));
   const loginStart = process.argv.includes(loginFlag) ||
     (process.platform === "darwin" && app.getLoginItemSettings().wasOpenedAtLogin);
-  if (openRequested || !loginStart) win.show();
+  if (openRequested || !loginStart) {
+    if (process.platform === "darwin") void app.dock?.show();
+    win.show();
+  } else if (process.platform === "darwin") app.dock?.hide();
   const pix = Buffer.alloc(32 * 32 * 4);
   for (let y = 0; y < 32; y++)
     for (let x = 0; x < 32; x++) {

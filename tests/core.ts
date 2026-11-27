@@ -72,6 +72,35 @@ test("only safe portable file trees accepted; basic formatting and alpha image v
   }
   assert.deepEqual(compatible(2, ["files"]), []);
 });
+test("portable offers accept 7,999 and 8,000 entries and reject excess or normalized name collisions", () => {
+  const entry = (name: string) => ({ name, dir: false, size: 0, hash: "0".repeat(64) });
+  const entries = Array.from({ length: 8001 }, (_, i) => entry(String(i)));
+  const id = randomUUID();
+  for (const n of [7999, 8000]) assert.equal(validateOffer({ id, entries: entries.slice(0, n) }).entries.length, n);
+  assert.throws(() => validateOffer({ id, entries }));
+  assert.throws(() => validateOffer({ id, entries: [entry("é"), entry("e\u0301")] }));
+});
+test("automatic file receipt enforces exact 32 MiB and 100-file boundaries before creating a job", async t => {
+  const root = await tmp(t), store = new Store(root, root);
+  const rx = new Receiver(store, async () => {}, () => true);
+  const peer = "a".repeat(64);
+  const offer = (count: number, bytes: number) => ({
+    id: randomUUID(), stamp: { origin: peer, clock: 1 },
+    entries: Array.from({ length: count }, (_, i) => ({
+      name: i + ".dat", size: i === 0 ? bytes : 0, dir: false, hash: "0".repeat(64),
+    })),
+  });
+  const limit = 32 * 1024 ** 2;
+  for (const args of [[99, limit - 1], [100, limit]]) {
+    const f = offer(args[0], args[1]);
+    assert.equal((await rx.offer(peer, f)).status, "ready");
+    await rx.cancel(peer, f.id);
+  }
+  const count = store.state.incoming.length;
+  await assert.rejects(rx.offer(peer, offer(101, 1)), /범위/);
+  await assert.rejects(rx.offer(peer, offer(1, limit + 1)), /범위/);
+  assert.equal(store.state.incoming.length, count);
+});
 test("private release folder only serves signed platform assets and requested byte range", async (t) => {
   const root = await tmp(t),
     pair = generateKeyPairSync("ed25519"),

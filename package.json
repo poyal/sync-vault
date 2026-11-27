@@ -8,10 +8,14 @@
   "scripts": {
     "check": "tsc --noEmit && npm test",
     "dist:dev": "node scripts/build.mjs --dev && node scripts/package.mjs --dev",
+    "dev:delivery": "node scripts/dev-delivery.mjs",
+    "test:tray": "node tests/tray.mjs",
+    "test:e2e:desktop": "node tests/lan-desktops.mjs",
+    "test:perf": "node tests/benchmark.mjs",
     "build": "node scripts/build.mjs",
     "start": "npm run build && electron .",
     "test": "node scripts/test.mjs",
-    "test:e2e": "npm run build && node tests/desktop.mjs && node tests/user-journeys.mjs && node tests/storage-journeys.mjs",
+    "test:e2e": "npm run build && node tests/desktop.mjs && node tests/user-journeys.mjs && node tests/storage-journeys.mjs && node tests/background-requests.mjs && node tests/tray.mjs",
     "dist:win": "npm run build && node scripts/package.mjs",
     "dist:mac": "npm run build && node scripts/package.mjs"
   },
@@ -60,6 +64,7 @@
       "identity": "-",
       "category": "public.app-category.utilities",
       "extendInfo": {
+        "LSUIElement": true,
         "NSLocalNetworkUsageDescription": "등록한 내 기기와 클립보드 및 파일을 공유합니다.",
         "NSBonjourServices": [
           "_sync-vault._tcp"
