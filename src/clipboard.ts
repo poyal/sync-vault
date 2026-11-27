@@ -15,6 +15,7 @@ export class Clips {
   private child?: ChildProcess;
   private tail: Promise<unknown> = Promise.resolve();
   private stopped = false;
+  private restart?: NodeJS.Timeout;
   constructor(
     private tool: string,
     private store: Store,
@@ -58,7 +59,14 @@ export class Clips {
     return next;
   }
   async start() {
-    this.last = (await this.snap()).seq;
+    if (this.stopped || this.child) return;
+    try {
+      if (this.last < 0) this.last = (await this.snap()).seq;
+    } catch (e) {
+      this.retryWatch();
+      throw e;
+    }
+    if (this.stopped || this.child) return;
     const c = (this.child = spawn(this.tool, ["watch", String(process.pid)], {
       windowsHide: true,
       stdio: ["ignore", "pipe", "ignore"],
@@ -67,16 +75,21 @@ export class Clips {
       void this.enqueue(() => this.capture()).catch(() => {});
     });
     c.on("error", () => this.note("클립보드 감시를 시작할 수 없습니다."));
-    c.on("exit", () => {
-      if (!this.stopped)
-        setTimeout(() => {
-          if (!this.stopped)
-            void this.start().catch((e) => this.note(e.message));
-        }, 2000);
+    c.on("close", () => {
+      if (this.child === c) this.child = undefined;
+      this.retryWatch();
     });
+  }
+  private retryWatch() {
+    if (this.stopped || this.restart) return;
+    this.restart = setTimeout(() => {
+      this.restart = undefined;
+      void this.start().catch((e) => this.note(e.message));
+    }, 2000);
   }
   stop() {
     this.stopped = true;
+    clearTimeout(this.restart);
     this.child?.kill();
   }
   get enabled() {
@@ -253,5 +266,24 @@ export class Clips {
   }
   async currentFiles() {
     return (await this.snap()).paths;
+  }
+  async pruneImages() {
+    const root = path.join(this.store.home, "image-cache");
+    const folders = await fs.readdir(root, { withFileTypes: true }).catch(e => {
+      if (e.code === "ENOENT") return [];
+      throw e;
+    });
+    const active = new Set(this.store.state.outgoing
+      .filter(j => j.state !== "완료" && j.state !== "취소")
+      .flatMap(j => j.entries.map(e => path.dirname(e.source))));
+    for (const entry of folders) {
+      if (!entry.isDirectory() || !/^[0-9a-f-]{36}$/i.test(entry.name)) continue;
+      const dir = path.join(root, entry.name);
+      if (active.has(dir) || Date.now() - (await fs.stat(dir)).mtimeMs < 86400000) continue;
+      // Only cache files created by capture() are eligible for expiry.
+      for (const f of await fs.readdir(dir, { withFileTypes: true }))
+        if (f.isFile() && /^Image-\d+\.png$/.test(f.name)) await fs.unlink(path.join(dir, f.name));
+      await fs.rmdir(dir).catch(e => { if (e.code !== "ENOTEMPTY") throw e; });
+    }
   }
 }

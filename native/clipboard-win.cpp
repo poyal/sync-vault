@@ -55,6 +55,7 @@ int wmain(int argc,wchar_t** argv){
     RegisterClassW(&wc);HWND window=CreateWindowW(wc.lpszClassName,L"",0,0,0,0,0,HWND_MESSAGE,nullptr,wc.hInstance,nullptr);
     if(mode==L"watch"){
         if(!window||!AddClipboardFormatListener(window))return 3;
+        std::cout<<GetClipboardSequenceNumber()<<std::endl;
         if(argc>2)parentHandle=OpenProcess(SYNCHRONIZE,FALSE,wcstoul(argv[2],nullptr,10));
         SetTimer(window,1,3000,nullptr);MSG msg;
         while(GetMessageW(&msg,nullptr,0,0)>0){TranslateMessage(&msg);DispatchMessageW(&msg);}return 0;

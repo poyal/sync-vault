@@ -4,6 +4,7 @@ import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Settings, Peer, Outgoing, Incoming, Stamp } from "./types";
+import { development, product } from "./channel";
 export const settingsSchema = z
   .object({
     name: z.string().trim().min(1).max(60),
@@ -28,13 +29,13 @@ export function defaults(downloads: string): Settings {
   return {
     name: os.hostname().slice(0, 60) || "내 컴퓨터",
     adapter: "",
-    receive: path.join(downloads, "Sync Vault"),
-    paused: false,
+    receive: path.join(downloads, product),
+    paused: development,
     text: true,
     image: true,
     files: true,
     login: false,
-    updates: true,
+    updates: !development,
     smallBytes: 32 * 1024 ** 2,
     smallCount: 100,
     releaseFolder: "",

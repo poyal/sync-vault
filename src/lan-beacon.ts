@@ -2,8 +2,9 @@ import { createSocket } from "node:dgram";
 import { networkInterfaces } from "node:os";
 import { isIP } from "node:net";
 import { z } from "zod";
-const udpPort = 49433;
-const protocol = "sync-vault-discovery/1";
+import { development, service } from "./channel";
+const udpPort = development ? 49436 : 49433;
+const protocol = service + "-discovery/1";
 const endpoint = z.object({
   id: z.string().regex(/^[0-9a-f]{64}$/),
   name: z.string().min(1).max(60),

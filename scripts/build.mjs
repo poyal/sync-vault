@@ -3,6 +3,8 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { build } from "esbuild";
 const out = path.resolve("out/native");
+const development = process.argv.includes("--dev");
+const dist = development ? "artifacts/dev-runtime" : "dist";
 fs.mkdirSync(out, { recursive: true });
 if (process.platform === "win32") {
   const vswhere = path.join(
@@ -67,7 +69,7 @@ if (process.platform === "win32") {
 } else throw Error("Windows 또는 Mac에서 빌드하세요.");
 await build({
   entryPoints: ["src/main.ts", "src/preload.ts"],
-  outdir: "dist",
+  outdir: dist,
   outExtension: { ".js": ".cjs" },
   bundle: true,
   platform: "node",
@@ -75,18 +77,19 @@ await build({
   target: "node24",
   external: ["electron"],
   define: {
+    __SYNC_VAULT_DEV__: JSON.stringify(development),
     "process.env.SYNC_VAULT_FEED": JSON.stringify(
-      process.env.SYNC_VAULT_FEED || "",
+      development ? "" : process.env.SYNC_VAULT_FEED || "",
     ),
     "process.env.SYNC_VAULT_RELEASE_KEY": JSON.stringify(
-      process.env.SYNC_VAULT_RELEASE_KEY ||
+      development ? "" : process.env.SYNC_VAULT_RELEASE_KEY ||
         (fs.existsSync("release-key.pub")
           ? fs.readFileSync("release-key.pub", "utf8")
           : ""),
     ),
   },
 });
-fs.cpSync("ui", "dist/ui", { recursive: true });
+fs.cpSync("ui", path.join(dist, "ui"), { recursive: true });
 
 import { makeIcon } from "./icon.mjs";
 makeIcon();

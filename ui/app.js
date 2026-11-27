@@ -87,6 +87,8 @@ function render() {
     el = $("#notice"),
     n = localError || m.notice;
   el.hidden = !n;
+  document.title = m.product;
+  $("#brand").textContent = m.product;
   el.innerHTML = n ? button("닫기", "dismiss") + esc(n) : "";
   $("#selfname").textContent = m.settings.name;
   $("#myip").textContent = m.local.address
@@ -232,6 +234,12 @@ function render() {
     $("#release-location").textContent =
       m.settings.releaseFolder || "배포 중지됨";
     const u = m.update;
+    f.updates.disabled = m.development;
+    $("#release-location").closest("details").hidden = m.development;
+    if (m.development) {
+      $("#update").textContent = "개발판은 새 개발 설치본으로 갱신하세요.";
+      return;
+    }
     $("#update").innerHTML =
       "<strong>Sync Vault " +
       esc(m.version) +
@@ -355,4 +363,14 @@ $("#release-folder").onclick = async () => {
 };
 $("#release-off").onclick = () => call("settings", { releaseFolder: "" });
 api.listen(refresh);
+api.onRequest(async ({ page, id }) => {
+  if (!["devices", "transfers"].includes(page)) return;
+  nav(page);
+  await refresh();
+  const action = page === "devices" ? "approve" : "accept";
+  const target = document.querySelector('[data-action="' + action + '"][data-value="' + CSS.escape(id) + '"]');
+  target?.scrollIntoView({ block: "center" });
+  target?.closest("article")?.setAttribute("tabindex", "-1");
+  target?.closest("article")?.focus({ preventScroll: true });
+});
 void refresh();

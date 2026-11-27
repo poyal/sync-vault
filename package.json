@@ -6,6 +6,8 @@
   "private": true,
   "main": "dist/main.cjs",
   "scripts": {
+    "check": "tsc --noEmit && npm test",
+    "dist:dev": "node scripts/build.mjs --dev && node scripts/package.mjs --dev",
     "build": "node scripts/build.mjs",
     "start": "npm run build && electron .",
     "test": "node scripts/test.mjs",

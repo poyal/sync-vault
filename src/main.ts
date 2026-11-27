@@ -5,6 +5,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  Notification,
   powerMonitor,
   safeStorage,
   shell,
@@ -23,20 +24,27 @@ import { Receiver, inventory, createJob, transmit } from "./files";
 import { ReleaseFolder } from "./releases";
 import { Updater } from "./update";
 import { type Outgoing, type Stamp, type ShareEndpoint } from "./types";
+import { development, product } from "./channel";
+const loginFlag = "--sync-vault-login";
+const loginOptions = process.platform === "win32" ? { args: [loginFlag] } : {};
 const testHome = !app.isPackaged ? process.env.SYNC_VAULT_TEST_HOME : undefined;
 if (testHome) app.setPath("userData", path.resolve(testHome));
-app.setName("Sync Vault");
+app.setName(product);
+if (process.platform === "win32")
+  app.setAppUserModelId(development ? "io.syncvault.desktop.dev" : "io.syncvault.desktop");
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => show());
+  app.on("second-instance", (_e, args) => {
+    if (!args.includes(loginFlag)) show();
+  });
   app
     .whenReady()
     .then(initialize)
     .catch(async (e) => {
       await dialog.showMessageBox({
         type: "error",
-        title: "Sync Vault",
+        title: product,
         message: String(e.message),
       });
       app.exit(1);
@@ -62,6 +70,51 @@ let schedule: NodeJS.Timeout,
 const running = new Map<string, AbortController>(),
   retryAt = new Map<string, number>();
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+type RequestLink = { page: "devices" | "transfers"; id: string };
+const waiting = new Map<string, Notification | undefined>();
+let requested: RequestLink | undefined;
+let openRequested = false;
+function navigateTo(link: RequestLink) {
+  requested = link;
+  show();
+  if (win && !win.webContents.isLoading() && !win.webContents.isCrashed()) {
+    win?.webContents.send("vault:request", link);
+    requested = undefined;
+  }
+}
+function pendingRequests() {
+  const entries = new Map<string, RequestLink>();
+  for (const p of lan.pending.values())
+    entries.set("pair-" + p.id + "-" + (p.attempt || p.expires),
+      { page: "devices", id: p.id });
+  for (const j of store.state.incoming)
+    if (j.state === "승인 대기") entries.set("file-" + j.id, { page: "transfers", id: j.id });
+  return entries;
+}
+function updateRequests() {
+  if (!tray || !lan || quitting) return;
+  const entries = pendingRequests();
+  let changed = false;
+  for (const [key, n] of waiting) {
+    if (entries.has(key)) continue;
+    waiting.delete(key);
+    n?.close();
+    changed = true;
+  }
+  for (const [key, link] of entries) {
+    if (waiting.has(key)) continue;
+    waiting.set(key, undefined);
+    changed = true;
+    if (win?.isVisible() && win.isFocused() || !Notification.isSupported()) continue;
+    const n = new Notification({ title: product, body: link.page === "devices"
+      ? "기기 등록 요청이 있습니다." : "파일 수신 요청이 있습니다." });
+    n.on("click", () => { if (pendingRequests().has(key)) navigateTo(link); });
+    n.on("failed", () => note("알림을 표시할 수 없습니다. 트레이에서 대기 요청을 확인하세요."));
+    waiting.set(key, n);
+    n.show();
+  }
+  if (changed) trayMenu();
+}
 function note(s: string) {
   notice = s;
   change();
@@ -70,18 +123,23 @@ function change() {
   if (!uiTick)
     uiTick = setTimeout(() => {
       uiTick = undefined;
-      if (win && !win.isDestroyed()) win.webContents.send("vault:changed");
+      updateRequests();
+      if (win?.isVisible() && !win.webContents.isCrashed()) win.webContents.send("vault:changed");
     }, 180);
 }
 function show() {
-  if (!win) return;
+  openRequested = true;
+  if (!win || win.isDestroyed()) return;
+  if (win.webContents.isCrashed()) win.reload();
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
+  change();
 }
 function status() {
   const s = store.state;
   return {
+    product, development,
     version: app.getVersion(),
     settings: s.settings,
     local: {
@@ -149,6 +207,10 @@ function status() {
 async function initialize() {
   const home = app.getPath("userData");
   store = new Store(home, app.getPath("downloads"));
+  // Convert the previous Windows login entry when updating an enabled install.
+  if (app.isPackaged && process.platform === "win32" && store.state.settings.login &&
+      app.getLoginItemSettings().openAtLogin && !app.getLoginItemSettings(loginOptions).openAtLogin)
+    app.setLoginItemSettings({ ...loginOptions, openAtLogin: true });
   if (!(await safeStorage.isAsyncEncryptionAvailable()))
     throw Error(
       "OS 키 저장소에 접근할 수 없습니다. 로그인 키체인 또는 Windows 계정을 확인하세요.",
@@ -183,6 +245,8 @@ async function initialize() {
     app.getVersion(),
     async (id, route, req) => {
       if (updating) throw Error("업데이트 준비 중");
+      if (development && route.startsWith("/release/"))
+        throw Error("개발판은 업데이트를 배포하지 않습니다.");
       if (route === "/release/index") {
         await readJSON(req);
         return releases.index();
@@ -194,7 +258,9 @@ async function initialize() {
       }
       if (route === "/offer") {
         const offer = await readJSON(req, 8 * 1024 ** 2);
-        return rx.locked((offer as any).id, () => rx.offer(id, offer));
+        const result = await rx.locked((offer as any).id, () => rx.offer(id, offer));
+        change();
+        return result;
       }
       if (route === "/cancel") {
         const { id: job } = z
@@ -335,7 +401,7 @@ async function initialize() {
     height: 735,
     minWidth: 740,
     minHeight: 560,
-    title: "Sync Vault",
+    title: product,
     backgroundColor: "#f8faf9",
     show: false,
     webPreferences: {
@@ -354,6 +420,13 @@ async function initialize() {
       win?.hide();
     }
   });
+  win.webContents.on("did-finish-load", () => {
+    if (requested) win?.webContents.send("vault:request", requested);
+    requested = undefined;
+  });
+  win.webContents.on("render-process-gone", () => {
+    if (!quitting && win?.isVisible()) win.reload();
+  });
   ipcMain.handle("vault", async (e, action, value) => {
     if (
       e.sender !== win?.webContents ||
@@ -363,7 +436,9 @@ async function initialize() {
     return command(action, value);
   });
   await win.loadFile(path.join(__dirname, "ui", "index.html"));
-  win.show();
+  const loginStart = process.argv.includes(loginFlag) ||
+    (process.platform === "darwin" && app.getLoginItemSettings().wasOpenedAtLogin);
+  if (openRequested || !loginStart) win.show();
   const pix = Buffer.alloc(32 * 32 * 4);
   for (let y = 0; y < 32; y++)
     for (let x = 0; x < 32; x++) {
@@ -381,22 +456,34 @@ async function initialize() {
   const ico = nativeImage.createFromBitmap(pix, { width: 32, height: 32 });
   win.setIcon(ico);
   tray = new Tray(ico.resize({ width: 18, height: 18 }));
-  tray.setToolTip("Sync Vault");
-  tray.on("click", show);
+  tray.setToolTip(product);
+  if (process.platform === "win32") tray.on("click", () => show());
   trayMenu();
   app.on("activate", show);
+  let lockGeneration = 0;
+  let unlockRetry: NodeJS.Timeout | undefined;
   powerMonitor.on("lock-screen", () => {
+    ++lockGeneration;
+    clearTimeout(unlockRetry);
     clips.locked = true;
     change();
   });
   powerMonitor.on("unlock-screen", () => {
-    void clips
-      .resetBaseline()
-      .finally(() => {
+    const generation = ++lockGeneration;
+    const resumeClipboard = async () => {
+      if (quitting || generation !== lockGeneration) return;
+      try {
+        await clips.resetBaseline();
+        if (generation !== lockGeneration) return;
         clips.locked = false;
         change();
-      })
-      .catch((e) => note(msg(e)));
+      } catch (e) {
+        note(msg(e));
+        unlockRetry = setTimeout(resumeClipboard, 2000);
+        unlockRetry.unref();
+      }
+    };
+    void resumeClipboard();
   });
   powerMonitor.on("resume", () => void lan.poll(true));
   lan.start();
@@ -434,7 +521,11 @@ function keyForRelease() {
 function trayMenu() {
   tray?.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Sync Vault 열기", click: show },
+      { label: product + " 열기", click: () => show() },
+      ...Array.from(pendingRequests(), ([key, link]) => ({
+        label: (link.page === "devices" ? "기기 등록 요청" : "파일 수신 요청") + " 열기",
+        click: () => { if (pendingRequests().has(key)) navigateTo(link); },
+      })),
       {
         label: store.state.settings.paused
           ? "클립보드 공유 재개"
@@ -468,6 +559,7 @@ async function pump() {
   if (quitting || updating) return;
   if (clips.enabled && Date.now() > nextPrune) {
     nextPrune = Date.now() + 3600000;
+    void clips.pruneImages().catch((e) => note(msg(e)));
     if (
       store.state.incoming.some(
         (j) =>
@@ -608,6 +700,8 @@ async function applyUpdate() {
 }
 async function command(action: string, v: any): Promise<any> {
   if (action === "state") return status();
+  if (development && ["check", "download", "update-now", "update-later"].includes(action))
+    throw Error("개발판은 새 개발 설치본으로 갱신하세요.");
   if (updating) throw Error("업데이트 중입니다.");
   if (action === "refresh") {
     await lan.poll(true);
@@ -763,6 +857,10 @@ async function command(action: string, v: any): Promise<any> {
   if (action === "settings") {
     const old = store.state.settings,
       proposed = settingsSchema.parse({ ...old, ...v });
+    if (development) {
+      proposed.updates = false;
+      proposed.releaseFolder = "";
+    }
     if (proposed.releaseFolder && proposed.releaseFolder !== old.releaseFolder)
       await new ReleaseFolder(
         () => proposed.releaseFolder,
@@ -772,10 +870,10 @@ async function command(action: string, v: any): Promise<any> {
       proposed.receive = writable(proposed.receive);
     if (old.paused !== proposed.paused) await clips.resetBaseline();
     if (proposed.login !== old.login) {
-      app.setLoginItemSettings({ openAtLogin: proposed.login });
+      app.setLoginItemSettings({ ...loginOptions, openAtLogin: proposed.login });
       if (
         app.isPackaged &&
-        app.getLoginItemSettings().openAtLogin !== proposed.login
+        app.getLoginItemSettings(loginOptions).openAtLogin !== proposed.login
       )
         throw Error("OS의 로그인 항목 설정을 확인하세요.");
     }

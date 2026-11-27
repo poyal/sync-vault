@@ -10,6 +10,7 @@ int main(int argc,char** argv){ @autoreleasepool {
     NSPasteboard *pb=[qa hasPrefix:@"SyncVaultQA-"]?[NSPasteboard pasteboardWithName:qa]:[NSPasteboard generalPasteboard];
     if(!strcmp(argv[1],"watch")){
         NSInteger last=pb.changeCount;
+        printf("%ld\n",(long)last);fflush(stdout);
         for(;;){@autoreleasepool{
             if(getppid()==1)return 0;
             NSInteger seq=pb.changeCount;

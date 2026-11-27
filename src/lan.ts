@@ -18,6 +18,7 @@ import { Store } from "./store";
 import { features, type Peer, type ShareEndpoint } from "./types";
 import { ReturnChannel } from "./return-channel";
 import { chunkSize } from "./files";
+import { service, wireVersion } from "./channel";
 const hello = z.object({
   name: z.string().min(1).max(60),
   port: z.number().int().min(1).max(65535),
@@ -32,7 +33,7 @@ const hello = z.object({
     .optional(),
 });
 export function compatible(version: number, remote: string[]) {
-  return version === 1 ? features.filter((x) => remote.includes(x)) : [];
+  return version === wireVersion ? features.filter((x) => remote.includes(x)) : [];
 }
 type Candidate = {
   id: string;
@@ -109,7 +110,7 @@ export class Lan {
     return {
       name: this.store.state.settings.name,
       port: this.port,
-      protocol: 1,
+      protocol: wireVersion,
       features: [...features, "return-channel"],
       version: this.version,
       clock: Math.max(
@@ -329,7 +330,7 @@ export class Lan {
       const published = bonjour.publish({
         name: instance,
         host: instance + ".local",
-        type: "sync-vault",
+        type: service,
         port: this.pairPort,
         disableIPv6: true,
         txt: {
@@ -358,7 +359,7 @@ export class Lan {
       };
       this.refreshBrowse = () => {
         this.browser?.stop();
-        this.browser = bonjour.find({ type: "sync-vault" }, found);
+        this.browser = bonjour.find({ type: service }, found);
         this.browser.on("txt-update", found);
         this.browser.on("down", (s: any) => {
           this.nearby.delete(s.txt?.id);

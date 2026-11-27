@@ -11,4 +11,7 @@ contextBridge.exposeInMainWorld("vault", {
   listen: (fn: () => void) => {
     ipcRenderer.on("vault:changed", fn);
   },
+  onRequest: (fn: (link: { page: string; id: string }) => void) => {
+    ipcRenderer.on("vault:request", (_event, link) => fn(link));
+  },
 });
