@@ -41,7 +41,7 @@ export async function soak(d, peer, receive, base, token) {
   const report = { platform: process.platform, arch: process.arch, os: os.release(),
     appVersion: appState.version, product: appState.product, startedAt: new Date().toISOString(),
     run: token, status: "RUNNING", samples: [], sent: [], recoveryMs: null };
-  const root = d.app.process().pid;
+  const root = await d.app.evaluate(() => process.pid);
   await d.app.evaluate(({ BrowserWindow, app }) => {
     const win = BrowserWindow.getAllWindows()[0];
     globalThis.qaResidentEvents = [];

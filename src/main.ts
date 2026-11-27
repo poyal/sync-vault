@@ -120,17 +120,18 @@ function note(s: string) {
   change();
 }
 function change() {
+  if (quitting) return;
   if (!uiTick)
     uiTick = setTimeout(() => {
       uiTick = undefined;
       updateRequests();
-      if (win?.isVisible() && !win.webContents.isCrashed()) win.webContents.send("vault:changed");
+      if (!quitting && win && !win.isDestroyed() && win.isVisible() && !win.webContents.isCrashed())
+        win.webContents.send("vault:changed");
     }, 180);
 }
 function show() {
   openRequested = true;
   if (!win || win.isDestroyed()) return;
-  if (process.platform === "darwin" && !app.dock?.isVisible()) void app.dock?.show();
   if (win.webContents.isCrashed()) win.reload();
   if (win.isMinimized()) win.restore();
   win.show();
@@ -206,6 +207,7 @@ function status() {
   };
 }
 async function initialize() {
+  if (process.platform === "darwin") app.setActivationPolicy("accessory");
   const home = app.getPath("userData");
   store = new Store(home, app.getPath("downloads"));
   // Convert the previous Windows login entry when updating an enabled install.
@@ -422,7 +424,6 @@ async function initialize() {
     if (!quitting) {
       e.preventDefault();
       win?.hide();
-      if (process.platform === "darwin") app.dock?.hide();
     }
   });
   win.webContents.on("did-finish-load", () => {
@@ -443,10 +444,7 @@ async function initialize() {
   await win.loadFile(path.join(__dirname, "ui", "index.html"));
   const loginStart = process.argv.includes(loginFlag) ||
     (process.platform === "darwin" && app.getLoginItemSettings().wasOpenedAtLogin);
-  if (openRequested || !loginStart) {
-    if (process.platform === "darwin") void app.dock?.show();
-    win.show();
-  } else if (process.platform === "darwin") app.dock?.hide();
+  if (openRequested || !loginStart) win.show();
   const pix = Buffer.alloc(32 * 32 * 4);
   for (let y = 0; y < 32; y++)
     for (let x = 0; x < 32; x++) {
@@ -940,6 +938,7 @@ async function command(action: string, v: any): Promise<any> {
 }
 app.on("before-quit", () => {
   quitting = true;
+  clearTimeout(uiTick);
   clearInterval(schedule);
   pair?.abort();
   for (const c of running.values()) c.abort();

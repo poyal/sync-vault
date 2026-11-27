@@ -44,7 +44,7 @@ try {
   assert.equal(await visible(), 0);
   if (process.platform === "darwin") assert.equal(await app.evaluate(({ app }) => app.dock.isVisible()), false);
   const port = (await page.evaluate(() => window.vault.call("state"))).local.port;
-  const pid = app.process().pid;
+  const pid = await app.evaluate(() => process.pid);
   await expect.poll(() => watchers(pid), { timeout: 10000 }).toHaveLength(1);
   const [originalWatcher] = await watchers(pid);
   process.kill(originalWatcher);
@@ -57,7 +57,8 @@ try {
     await expect.poll(visible).toBe(1);
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
     assert.equal(await visible(), 0);
-    if (process.platform === "darwin") assert.equal(await app.evaluate(({ app }) => app.dock.isVisible()), false);
+    if (process.platform === "darwin")
+      await expect.poll(() => app.evaluate(({ app }) => app.dock.isVisible()), { timeout: 2000 }).toBe(false);
   }
   // Kill only the renderer belonging to this disposable test instance.
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer());
@@ -72,6 +73,8 @@ try {
     return wc.executeJavaScript("window.vault.call('state').then(s => s.local.id)").catch(() => "");
   })).toBe(state.local.id);
   const start = performance.now();
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.executeJavaScript("window.vault.call('settings', {text:false})"));
   await app.close();
   app = undefined;
   assert.ok(performance.now() - start <= 10000, "quit exceeded 10 s");

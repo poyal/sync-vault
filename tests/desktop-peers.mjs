@@ -106,16 +106,30 @@ async function fixture(name, txt) {
   return f;
 }
 async function stopApps() {
-  await Promise.allSettled([...apps].map((a) => a.close()));
+  const results = await Promise.allSettled([...apps].map(async a => {
+    const pid = await a.evaluate(() => process.pid);
+    let timer;
+    try {
+      await Promise.race([a.close(), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(Error("QA 앱이 10초 안에 종료되지 않았습니다.")), 10000);
+      })]);
+    } catch (e) {
+      if (a.process().exitCode === null) {
+        try { process.kill(pid); } catch (killError) { if (killError.code !== "ESRCH") throw killError; }
+      }
+      throw e;
+    } finally { clearTimeout(timer); }
+  }));
+  const failed = results.find(r => r.status === "rejected");
+  if (failed) throw failed.reason;
 }
 async function cleanup() {
-  await stopApps();
-  await fs.rm(base, {
+  try { await stopApps(); } finally { await fs.rm(base, {
     recursive: true,
     force: true,
     maxRetries: 8,
     retryDelay: 200,
-  });
+  }); }
 }
 export {
   base,
