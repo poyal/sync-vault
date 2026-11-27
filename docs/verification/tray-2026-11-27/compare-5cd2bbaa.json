@@ -1,0 +1,126 @@
+{
+  "run": "5cd2bbaa",
+  "mode": "--private-lock",
+  "order": [
+    "candidate",
+    "baseline"
+  ],
+  "startedAt": "2026-11-27T11:24:26.562Z",
+  "status": "FAIL",
+  "builds": {
+    "candidate": {
+      "discovery": {
+        "win": [
+          114.37930000000006
+        ],
+        "mac": [
+          220.49229100000002
+        ]
+      },
+      "directions": {
+        "mac-to-win": {
+          "peerOnline": true,
+          "senderJobs": [],
+          "receiverJobs": [],
+          "lockedCopySkipped": true,
+          "freshCopyReceived": true
+        },
+        "win-to-mac": {
+          "peerOnline": true,
+          "senderJobs": [],
+          "receiverJobs": [],
+          "lockedCopySkipped": true,
+          "freshCopyReceived": true
+        }
+      },
+      "hosts": [
+        {
+          "version": "0.1.1-dev",
+          "platform": "win32",
+          "arch": "x64",
+          "osRelease": "10.0.26300",
+          "product": "Sync Vault Dev"
+        },
+        {
+          "version": "0.1.1-dev",
+          "platform": "darwin",
+          "arch": "arm64",
+          "osRelease": "27.2.0",
+          "product": "Sync Vault Dev"
+        }
+      ],
+      "lockStatus": "PASS"
+    },
+    "baseline": {
+      "discovery": {
+        "win": [
+          77.4204000000002
+        ],
+        "mac": [
+          142.54829199999995
+        ]
+      },
+      "directions": {
+        "mac-to-win": {
+          "peerOnline": true,
+          "senderJobs": [
+            {
+              "state": "완료",
+              "direction": "보냄",
+              "error": ""
+            }
+          ],
+          "receiverJobs": [
+            {
+              "state": "완료",
+              "direction": "받음"
+            }
+          ],
+          "lockedCopySkipped": false,
+          "freshCopyReceived": true
+        },
+        "win-to-mac": {
+          "peerOnline": true,
+          "senderJobs": [
+            {
+              "state": "완료",
+              "direction": "보냄",
+              "error": ""
+            }
+          ],
+          "receiverJobs": [
+            {
+              "state": "완료",
+              "direction": "받음"
+            }
+          ],
+          "lockedCopySkipped": false,
+          "freshCopyReceived": true
+        }
+      },
+      "hosts": [
+        {
+          "version": "0.1.1",
+          "platform": "win32",
+          "arch": "x64",
+          "osRelease": "10.0.26300",
+          "product": "Sync Vault"
+        },
+        {
+          "version": "0.1.1",
+          "platform": "darwin",
+          "arch": "arm64",
+          "osRelease": "27.2.0",
+          "product": "Sync Vault"
+        }
+      ],
+      "lockStatus": "FAIL"
+    }
+  },
+  "errors": [
+    "baseline/mac-to-win 잠금 중 복사 {\"peerOnline\":true,\"senderJobs\":[{\"state\":\"완료\",\"direction\":\"보냄\",\"error\":\"\"}],\"receiverJobs\":[{\"state\":\"완료\",\"direction\":\"받음\"}],\"lockedCopySkipped\":false,\"freshCopyReceived\":true}",
+    "baseline/win-to-mac 잠금 중 복사 {\"peerOnline\":true,\"senderJobs\":[{\"state\":\"완료\",\"direction\":\"보냄\",\"error\":\"\"}],\"receiverJobs\":[{\"state\":\"완료\",\"direction\":\"받음\"}],\"lockedCopySkipped\":false,\"freshCopyReceived\":true}",
+    "AssertionError [ERR_ASSERTION]: 잠금 시나리오 실패. 빌드별 송수신 기록을 확인하세요."
+  ],
+  "finishedAt": "2026-11-27T11:24:40.832Z"
+}

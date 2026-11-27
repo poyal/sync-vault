@@ -2,6 +2,7 @@
 import { createInterface } from "node:readline";
 import { createHash, randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -9,15 +10,24 @@ import { setTimeout as delay } from "node:timers/promises";
 import { _electron as electron } from "@playwright/test";
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
-import { base, cleanup, launch } from "./desktop-peers.mjs";
+import { base, cleanup, copyPrivateFiles, launch } from "./desktop-peers.mjs";
 
 const [exe, label, mode] = process.argv.slice(2);
 const desktop = mode === "desktop";
+const privateFiles = mode === "private-files";
+assert.ok(desktop || privateFiles || mode === "files-only");
 process.env.SYNC_VAULT_QA_PHYSICAL = "1";
 const output = path.join(base, "received");
-const app = await launch(label, exe, { desktopClipboard: desktop });
+const app = await launch(label, exe, { desktopClipboard: desktop, loginStart: privateFiles }).catch(async error => {
+  await cleanup();
+  throw error;
+});
+if (privateFiles) {
+  assert.match(app.station, /^SyncVaultQA-[a-f0-9-]+$/);
+  await app.app.evaluate(({ Notification }) => { Notification.isSupported = () => false; });
+}
 await app.call("settings", { receive: output, paused: true });
-let peer, editor, page;
+let peer, editor, page, resumeApp;
 const until = async (predicate, ms) => {
   const deadline = performance.now() + ms;
   while (performance.now() < deadline) {
@@ -58,7 +68,7 @@ const commands = {
     peer = id;
     await until(async () => (await app.state()).peers.some(p => p.id === peer && p.online), 20000);
     await app.call("autoaccept", { id, value: true });
-    await app.call("settings", { paused: !desktop, files: false, text: desktop, image: desktop });
+    await app.call("settings", { paused: !(desktop || privateFiles), files: privateFiles, text: desktop, image: desktop });
     await app.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
     await app.app.evaluate(() => {
       globalThis.qaRoutes = { chunks: 0, replies: 0 };
@@ -80,6 +90,67 @@ const commands = {
     }
   },
   async routes() { return app.app.evaluate(() => globalThis.qaRoutes); },
+  async copyFile(tag) {
+    assert.ok(privateFiles);
+    assert.match(tag, /^[a-z0-9-]{1,90}$/);
+    const source = path.join(base, tag + ".txt");
+    await fs.writeFile(source, tag + "\n한글 😀", { flag: "wx" });
+    copyPrivateFiles(app.station, [source]);
+  },
+  async pastedFile(tag) {
+    assert.ok(privateFiles);
+    assert.match(tag, /^[a-z0-9-]{1,90}$/);
+    const helper = path.join(path.dirname(exe), process.platform === "win32" ? "resources/native/clipboard.exe" : "../Resources/native/clipboard");
+    const folder = path.join(app.profile, "clipboard-files");
+    await until(async () => {
+      const data = execFileSync(helper, ["inspect"], { env: { ...process.env, SYNC_VAULT_QA_STATION: app.station }, windowsHide: true });
+      const files = data.subarray(5).toString().split("\0").filter(Boolean);
+      if (data[4] !== 2 || files.length !== 1 || path.basename(files[0]) !== tag + ".txt") return false;
+      assert.equal(path.dirname(await fs.realpath(files[0])), await fs.realpath(folder));
+      assert.equal(await fs.readFile(files[0], "utf8"), tag + "\n한글 😀");
+      return true;
+    }, 10000);
+  },
+  async hidden() {
+    return app.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().every(w => !w.isVisible()));
+  },
+  async pauseMacProcess() {
+    assert.ok(privateFiles && process.platform === "darwin" && !resumeApp);
+    const pid = app.app.process().pid;
+    process.kill(pid, "SIGSTOP");
+    const timer = setTimeout(() => resumeApp?.(), 2000);
+    resumeApp = () => {
+      clearTimeout(timer);
+      resumeApp = undefined;
+      process.kill(pid, "SIGCONT");
+    };
+    await until(() => execFileSync("/bin/ps", ["-p", String(pid), "-o", "state="], { encoding: "utf8" }).includes("T"), 1000);
+  },
+  async fileStatus(tag) {
+    assert.ok(privateFiles);
+    const { jobs, peers, notice } = await app.state();
+    return { jobs: jobs.filter(j => j.name === tag + ".txt").map(({ state, direction, error }) => ({ state, direction, error })),
+      peerOnline: peers.some(p => p.id === peer && p.online), notice };
+  },
+  async copyWhileLocked(tag) {
+    assert.ok(privateFiles);
+    const stampClock = async () => JSON.parse(await fs.readFile(path.join(app.profile, "state.json"), "utf8")).stamp.clock;
+    await app.app.evaluate(({ powerMonitor }) => {
+      powerMonitor.emit("lock-screen");
+      powerMonitor.emit("unlock-screen");
+      powerMonitor.emit("lock-screen");
+    });
+    await delay(350);
+    const before = await stampClock();
+    try {
+      await commands.copyFile(tag);
+      await until(async () => (await stampClock()) > before, 5000);
+    } finally {
+      await app.app.evaluate(({ powerMonitor }) => { powerMonitor.emit("unlock-screen"); });
+    }
+    // Unlock asynchronously snapshots the OS board before accepting new copies.
+    await delay(500);
+  },
   async copy(value) {
     await page.locator("#edit").evaluate((el, value) => {
       const bold = document.createElement("b");
@@ -140,7 +211,10 @@ const pending = new Set();
 try {
   for await (const line of createInterface({ input: process.stdin })) {
     const { id, op, value } = JSON.parse(line);
-    if (op === "exit") break;
+    if (op === "exit") {
+      if (value === false) process.exitCode = 1;
+      break;
+    }
     const task = Promise.resolve().then(() => {
       if (!Object.hasOwn(commands, op)) throw Error("unknown QA operation");
       return commands[op](value);
@@ -149,6 +223,7 @@ try {
     void task.finally(() => pending.delete(task));
   }
 } finally {
+  resumeApp?.();
   await Promise.allSettled(pending);
   await editor?.close();
   await cleanup();

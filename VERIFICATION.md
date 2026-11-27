@@ -78,3 +78,11 @@
 - `npm run build` 후 `node tests/native.mjs`로 해당 OS의 독립 클립보드를 검사합니다. Windows의 Electron 클립보드 검사는 `node scripts/test-osclip.mjs`입니다. 실기기 왕복 검사는 `tests/liveclip.ts`, 파일·사설 릴리스 교차 전송은 `tests/mesh.ts`에 있습니다.
 - `node scripts/package.mjs --qa-previous`로 이전판 시험 패키지를 만든 뒤 `node tests/upgrade.mjs <이전 앱 디렉터리> <서명된 배포 폴더>`를 실행합니다. Windows에는 앱 EXE를 포함한 폴더를, Mac에는 .app 번들을 지정합니다. 시작 실패 복원 검사는 `node tests/rollback.mjs`입니다.
 
+### 창을 열지 않는 실기기 시험
+
+- `node tests/benchmark.mjs <로컬 설정.json> --private-files`는 정식·개발 설치본을 로그인 인수로 시작합니다. Windows 전용 윈도우 스테이션과 Mac의 이름 있는 NSPasteboard에 작은 파일을 복사하고, 상대 OS가 게시한 경로와 파일 내용을 확인합니다. 각 방향 100회, 방향별 256 MiB 전송 3회 중 동시 복사, Mac 앱 프로세스를 2초 정지했다가 재개한 뒤의 수신까지 검사합니다. 개발판 지연 기준은 유휴 p95 5초, 부하 중 p95 8초입니다. Windows 전용 스테이션 도구는 `node scripts/test-osclip.mjs`로 빌드합니다.
+- 같은 설정에서 `--private-lock`은 개발판 두 기기를 연결합니다. `--compare-baseline`을 추가하면 정식판에서도 같은 시험을 실행하고 각 방향의 송신·수신 작업을 기록합니다. 양쪽에서 각각 Electron의 잠금→해제→잠금 이벤트를 발생시키고 잠금 중 복사의 감지, 양쪽 전송 기록에서의 제외, 해제 후 새 파일의 수신을 검증합니다. 일반 클립보드의 실제 편집기 비교에는 전용 로그인 데스크톱과 `--desktop`을 사용합니다.
+- 비교 설정에는 `macHost`, `macNode`, `macWorkdir`, `baseline`과 `candidate` 각각의 `win`·`mac` 실행 경로를 지정합니다. QA 로그인 계정과 제어 계정이 다르면 `sessions.win`·`sessions.mac`에 각 기기의 로컬 설정 파일 경로를 지정합니다. 각 호스트는 그 파일로 `node tests/benchmark-session.mjs host <로컬 설정>`을 실행합니다. 파일에는 `qaUser`, `mode`(`desktop` 또는 `private-files`), 두 빌드의 절대 경로, OS별 `endpoint`(Windows의 `\\.\pipe\SyncVaultQA-...` 또는 Mac의 전용 Unix 소켓 경로), 무작위 32바이트를 64자리 소문자 hex로 표현한 `token`이 필요합니다. 설정 파일과 소켓 디렉터리는 해당 시험 계정과 제어 계정만 사용할 수 있게 둡니다. 호스트는 비교가 끝나거나 연결 대기 2분이 지나면 종료합니다.
+- `node tests/mac-install-cycle.mjs <개발판.dmg> --dev`는 읽기 전용 이미지를 복사해 서명, 숨김 기동, 삭제·재설치, 기기 ID와 설정 보존을 검사합니다. 이 경로는 Playwright의 모의 키체인을 씁니다. 실제 키체인 시험은 전용 QA 사용자가 로그인한 콘솔에서 `SYNC_VAULT_QA_USER`에 그 계정을 지정하고 `--system-keychain`을 추가합니다. `node tests/startup-tray.cjs`는 키 저장소가 응답하지 않는 동안 메뉴와 종료가 동작하는지 검사합니다.
+- Mac 빌드에서 설치된 코드 서명 신원을 선택하려면 `CSC_NAME`을 설정합니다. 이 컴퓨터에 서명 신원이 없으면 로컬 Dev DMG는 임시 서명됩니다. 개발 설치본은 각 OS에서 직접 전달하고, 전달본 삭제는 `node scripts/dev-delivery.mjs clean <installer.json>`으로 해시 확인 후 실행합니다.
+

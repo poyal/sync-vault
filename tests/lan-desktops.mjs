@@ -9,6 +9,7 @@ import {
   launch,
   nav,
   fixture,
+  copyPrivateFiles,
   action,
   cleanup,
 } from "./desktop-peers.mjs";
@@ -167,23 +168,11 @@ try {
     }
   }
   if (win) {
-    execFileSync(
-      path.resolve("artifacts/os-clipboard/station.exe"),
-      [d.station, "--local-files", ...localFiles],
-      { windowsHide: true },
-    );
+    copyPrivateFiles(d.station, localFiles);
     await checkAuto();
   } else {
     await checkAuto();
-    const jxa = `function run(a){ObjC.import('AppKit');const b=$.NSPasteboard.pasteboardWithName(a[0]);const items=$.NSMutableArray.array;for(const p of a.slice(1))items.addObject($.NSURL.fileURLWithPath(p));b.clearContents;if(!b.writeObjects(items))throw Error('pasteboard');}`;
-    execFileSync("/usr/bin/osascript", [
-      "-l",
-      "JavaScript",
-      "-e",
-      jxa,
-      d.station,
-      ...localFiles,
-    ]);
+    copyPrivateFiles(d.station, localFiles);
     await wait(async () =>
       (await d.state()).jobs.some(
         (j) => j.name === path.basename(localFiles[0]) && j.state === "완료",

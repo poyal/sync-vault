@@ -1,0 +1,56 @@
+{
+  "run": "30e3f383",
+  "mode": "--private-lock",
+  "order": [
+    "candidate"
+  ],
+  "startedAt": "2026-11-27T11:24:56.440Z",
+  "status": "PASS",
+  "builds": {
+    "candidate": {
+      "discovery": {
+        "win": [
+          150.24860000000012
+        ],
+        "mac": [
+          305.93945800000006
+        ]
+      },
+      "directions": {
+        "mac-to-win": {
+          "peerOnline": true,
+          "senderJobs": [],
+          "receiverJobs": [],
+          "lockedCopySkipped": true,
+          "freshCopyReceived": true
+        },
+        "win-to-mac": {
+          "peerOnline": true,
+          "senderJobs": [],
+          "receiverJobs": [],
+          "lockedCopySkipped": true,
+          "freshCopyReceived": true
+        }
+      },
+      "hosts": [
+        {
+          "version": "0.1.1-dev",
+          "platform": "win32",
+          "arch": "x64",
+          "osRelease": "10.0.26300",
+          "product": "Sync Vault Dev"
+        },
+        {
+          "version": "0.1.1-dev",
+          "platform": "darwin",
+          "arch": "arm64",
+          "osRelease": "27.2.0",
+          "product": "Sync Vault Dev"
+        }
+      ],
+      "lockStatus": "PASS"
+    }
+  },
+  "errors": [],
+  "finishedAt": "2026-11-27T11:25:03.304Z"
+}

@@ -45,7 +45,7 @@ function Click-Element($e, $right) {
   if ($e.TryGetClickablePoint([ref]$clickable)) { $point = $clickable }
   if (![VaultTrayMouse]::SetPhysicalCursorPos([int]$point.X,[int]$point.Y)) { throw 'Pointer unavailable' }
   Start-Sleep -Milliseconds 80
-  if ($right) {
+  if ($right -or $e.Current.Name.Trim() -eq 'Sync Vault Dev') {
     $hit = [System.Windows.Automation.AutomationElement]::FromPoint($point)
     $hitClass = $hit.Current.ClassName
     while ($hit -and $hit.Current.Name.Trim() -ne 'Sync Vault Dev') {
@@ -81,6 +81,10 @@ function Open-TrayMenu {
       ForEach-Object { $_.Current.ClassName + ' [' + $_.Current.Name + '] offscreen=' + $_.Current.IsOffscreen + ' bounds=' + $_.Current.BoundingRectangle })
     throw "Expected one Sync Vault Dev tray icon, found $($icons.Count). Shell panels: $panels. QA entries: $qa"
   }
+  if ($Item -eq '__OPEN_WINDOW__') {
+    Click-Element $icons[0] $false
+    return
+  }
   $owner = $icons[0]
   $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
   while ($owner -and $owner.Current.ClassName -notmatch 'OverflowXaml|NotifyIconOverflow|Shell_(Secondary)?TrayWnd') {
@@ -93,6 +97,7 @@ function Open-TrayMenu {
 }
 try {
   Open-TrayMenu
+  if ($Item -eq '__OPEN_WINDOW__') { return }
   $match = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$Item)
   for ($attempt=0; $attempt -lt 15; $attempt++) {
     Start-Sleep -Milliseconds 100

@@ -4,12 +4,14 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import assert from "node:assert/strict";
 import { closeApp } from "./quit.mjs";
 const base = await fs.mkdtemp(path.join(os.tmpdir(), "sync-vault-journey-"));
 const apps = new Set();
 const wait = async (f) =>
   expect.poll(f, { timeout: 16000, intervals: [100, 300] }).toBe(true);
-async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE, { desktopClipboard = false, configure = true } = {}) {
+async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE, { desktopClipboard = false, configure = true, loginStart = false } = {}) {
   const profile = path.join(base, label),
     env = {
       ...process.env,
@@ -24,6 +26,7 @@ async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE, { desktopClipb
     executablePath: exe || createRequire(import.meta.url)("electron"),
     args: [
       ...(exe ? [] : ["."]),
+      ...(loginStart ? ["--sync-vault-login"] : []),
       "--user-data-dir=" + profile,
       ...(process.platform === "darwin" ? ["--use-mock-keychain"] : []),
     ],
@@ -32,11 +35,15 @@ async function launch(label, exe = process.env.SYNC_VAULT_QA_EXE, { desktopClipb
   apps.add(app);
   app.once("close", () => apps.delete(app));
   const page = await app.firstWindow();
-  await expect(page.locator("#myip")).toHaveText(
-    process.env.SYNC_VAULT_QA_PHYSICAL === "1"
-      ? /\d+\.\d+\.\d+\.\d+:\d+/
-      : /127\.0\.0\.1:\d+/,
-  );
+  const endpoint = process.env.SYNC_VAULT_QA_PHYSICAL === "1" ? /\d+\.\d+\.\d+\.\d+:\d+/ : /127\.0\.0\.1:\d+/;
+  if (loginStart) {
+    await expect.poll(() => page.evaluate(async () => {
+      const { local } = await window.vault.call("state");
+      return local.port > 0 ? local.address + ":" + local.port : "";
+    })).toMatch(endpoint);
+  } else {
+    await expect(page.locator("#myip")).toHaveText(endpoint);
+  }
   await app.evaluate(({ dialog }) => {
     dialog.showMessageBox = async () => ({
       response: 0,
@@ -106,6 +113,23 @@ async function fixture(name, txt) {
   await fs.writeFile(f, txt);
   return f;
 }
+function copyPrivateFiles(station, files) {
+  assert.match(station, /^SyncVaultQA-[a-f0-9-]+$/);
+  assert.ok(files.length > 0 && files.every(f => path.isAbsolute(f)));
+  if (process.platform === "win32") {
+    execFileSync(path.resolve("artifacts/os-clipboard/station.exe"), [station, "--local-files", ...files], { windowsHide: true });
+  } else {
+    const copy = `function run(args) {
+      ObjC.import('AppKit');
+      const board = $.NSPasteboard.pasteboardWithName(args[0]);
+      const urls = $.NSMutableArray.array;
+      for (const file of args.slice(1)) urls.addObject($.NSURL.fileURLWithPath(file));
+      board.clearContents;
+      if (!board.writeObjects(urls)) throw Error('pasteboard');
+    }`;
+    execFileSync("/usr/bin/osascript", ["-l", "JavaScript", "-e", copy, station, ...files]);
+  }
+}
 async function stopApps() {
   const results = await Promise.allSettled([...apps].map(closeApp));
   const failed = results.find(r => r.status === "rejected");
@@ -130,6 +154,7 @@ export {
   job,
   action,
   fixture,
+  copyPrivateFiles,
   stopApps,
   cleanup,
 };
