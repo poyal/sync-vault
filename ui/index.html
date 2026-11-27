@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Sync Vault</title>
+    <link rel="stylesheet" href="style.css" />
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <aside>
+      <header class="brand">
+        <span class="logo" aria-hidden="true">⇄</span> Sync Vault
+      </header>
+      <nav aria-label="메뉴">
+        <button data-page="devices" class="selected">기기</button
+        ><button data-page="transfers">전송</button
+        ><button data-page="settings">설정</button>
+      </nav>
+      <div class="self">
+        <span class="dot"></span>
+        <div>
+          <strong id="selfname">내 기기</strong><small id="myip"></small>
+        </div>
+      </div>
+    </aside>
+    <main>
+      <div id="notice" role="status" hidden></div>
+      <section id="devices">
+        <header class="heading">
+          <div>
+            <small>로컬 네트워크</small>
+            <h1>내 기기</h1>
+          </div>
+          <button data-action="refresh">다시 찾기</button>
+        </header>
+        <div id="registered"></div>
+        <div id="pending"></div>
+        <h2>주변 기기</h2>
+        <div id="nearby"></div>
+        <details>
+          <summary>주소로 직접 연결</summary>
+          <form id="connect">
+            <label
+              >상대 기기에 표시된 IP와 포트<input
+                id="endpoint"
+                placeholder="192.168.0.12:49432"
+                required /></label
+            ><button class="primary">등록</button>
+          </form>
+        </details>
+        <details>
+          <summary>연결 진단</summary>
+          <p id="diagnostic"></p>
+          <p>
+            두 기기의 앱을 켜고 같은 집 네트워크를 선택해 주세요. Windows 개인
+            네트워크 방화벽과 Mac의 개인정보 보호 및 보안 → 로컬 네트워크에서
+            Sync Vault 접근을 확인할 수 있습니다. 게스트 Wi-Fi는 기기 간 접속을
+            차단할 수 있습니다.
+          </p>
+          <p>
+            프린터·TV 등 집 안의 전체 장비는 공유기 관리 화면의 연결된 기기에서
+            확인하세요.
+          </p>
+        </details>
+      </section>
+      <section id="transfers" hidden>
+        <header class="heading">
+          <div>
+            <small>파일과 폴더</small>
+            <h1>전송</h1>
+          </div>
+        </header>
+        <div id="dropzone" tabindex="0">
+          <b>보낼 파일이나 폴더를 여기에 놓으세요</b>
+          <div class="tools">
+            <button data-action="dialog-files">파일 추가</button
+            ><button data-action="dialog-folders">폴더 추가</button>
+          </div>
+        </div>
+        <div id="selection"></div>
+        <h2>전송 목록</h2>
+        <div id="jobs"></div>
+      </section>
+      <section id="settings" hidden>
+        <header class="heading">
+          <div>
+            <small>이 기기</small>
+            <h1>설정</h1>
+          </div>
+        </header>
+        <form id="prefs">
+          <label>기기 이름<input name="name" required maxlength="60" /></label
+          ><label>사용할 네트워크<select name="adapter"></select></label>
+          <label
+            >받은 파일 저장 위치<span class="inline"
+              ><input name="receive" readonly /><button
+                type="button"
+                id="choose-folder"
+              >
+                선택
+              </button></span
+            ></label
+          >
+          <fieldset>
+            <legend>클립보드 자동 공유</legend>
+            <label
+              ><input type="checkbox" name="text" />텍스트와 기본 서식</label
+            ><label><input type="checkbox" name="image" />이미지</label
+            ><label><input type="checkbox" name="files" />파일 목록</label
+            ><label
+              ><input type="checkbox" name="paused" />자동 공유 일시 중지</label
+            >
+          </fieldset>
+          <div class="grid">
+            <label
+              >자동 파일 합계 (MiB)<input
+                type="number"
+                name="mib"
+                min="1"
+                max="128"
+                required /></label
+            ><label
+              >자동 파일 개수<input
+                type="number"
+                name="smallCount"
+                min="1"
+                max="500"
+                required
+            /></label>
+          </div>
+          <fieldset>
+            <legend>앱</legend>
+            <label><input type="checkbox" name="login" />로그인할 때 실행</label
+            ><label
+              ><input type="checkbox" name="updates" />하루 한 번 업데이트
+              확인</label
+            >
+          </fieldset>
+          <div class="tools">
+            <button class="primary">변경 저장</button
+            ><button type="button" data-action="defaults">
+              환경설정 초기화
+            </button>
+          </div>
+        </form>
+        <h2>업데이트</h2>
+        <div id="update"></div>
+        <details>
+          <summary>이 기기를 사설 배포처로 사용</summary>
+          <p>
+            등록한 기기가 서명된 릴리스 폴더의 자기 OS용 패키지를 받을 수
+            있습니다.
+          </p>
+          <small id="release-location"></small>
+          <div class="tools">
+            <button id="release-folder">배포 폴더 선택</button
+            ><button id="release-off">배포 중지</button>
+          </div>
+        </details>
+        <button data-action="reset" class="danger">
+          이 기기의 등록 초기화
+        </button>
+      </section>
+    </main>
+  </body>
+</html>

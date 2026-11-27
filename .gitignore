@@ -1,0 +1,11 @@
+node_modules/
+dist/
+out/
+release/
+artifacts/
+.cache/
+*.pfx
+*.pem
+.release-keys/
+.DS_Store
+
