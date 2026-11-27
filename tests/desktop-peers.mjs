@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { closeApp } from "./quit.mjs";
-const base = await fs.mkdtemp(path.join(os.tmpdir(), "sync-vault-journey-"));
+const base = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), "sync-vault-journey-"));
 const apps = new Set();
 const wait = async (f) =>
   expect.poll(f, { timeout: 16000, intervals: [100, 300] }).toBe(true);

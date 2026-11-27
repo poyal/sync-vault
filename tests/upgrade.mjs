@@ -22,6 +22,7 @@ try {
   const inbox = path.join(base, "received");
   await client.call("settings", { receive: inbox });
   const before = await client.state();
+  assert.equal(await fs.realpath(before.settings.receive), await fs.realpath(inbox));
   assert.notEqual(before.version, version);
   const settingsFile = path.join(client.profile, "state.json");
   const identity = JSON.parse(await fs.readFile(settingsFile, "utf8")).sealed;
@@ -35,12 +36,22 @@ try {
       const fs = process.getBuiltinModule("node:fs");
       const { Readable } = process.getBuiltinModule("node:stream");
       const base = "https://github.com/poyal/sync-vault/releases/download/v" + version + "/";
-      globalThis.fetch = async (url) => {
+      let holdFirstZip = true;
+      globalThis.fetch = async (url, options) => {
         if (String(url) === "https://api.github.com/repos/poyal/sync-vault/releases/latest")
           return Response.json({ draft: false, prerelease: false, tag_name: "v" + version,
             assets: files.map(f => ({ name: f.name, size: f.size, state: "uploaded", browser_download_url: base + f.name })) });
         const file = files.find(f => String(url) === base + f.name);
         if (!file) throw Error("예상하지 않은 URL");
+        if (file.name.endsWith(".zip") && holdFirstZip) {
+          holdFirstZip = false;
+          globalThis.firstTestZipRequested = true;
+          const { signal } = options;
+          signal.throwIfAborted();
+          await new Promise((_, reject) => {
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+        }
         return new Response(Readable.toWeb(fs.createReadStream(file.file)));
       };
     }, { files, version });
@@ -49,9 +60,17 @@ try {
   await page.locator('aside [data-page="settings"]').click();
   await page.getByRole("button", { name: "앱 정보 · 업데이트" }).click();
   await page.getByRole("button", { name: "지금 확인" }).click();
-  await expect(page.locator("#update-status")).toContainText("다운로드 가능", { timeout: 30000 });
-  assert.equal((await client.state()).update.next, version);
+  await expect.poll(async () => {
+    const update = (await client.state()).update;
+    return [update.status, update.next, update.busy];
+  }, { timeout: 30000 }).toEqual(["다운로드 가능", version, false]);
+  await expect(page.locator("#update-status")).toContainText("공개 버전 " + version);
   await page.getByRole("button", { name: "다운로드", exact: true }).click();
+  if (assets) await wait(() => client.app.evaluate(() => !!globalThis.firstTestZipRequested));
+  await page.getByRole("button", { name: "다운로드 취소", exact: true }).click();
+  await expect(page.locator("#update-status")).toContainText("다운로드 취소됨");
+  assert.deepEqual(await fs.readdir(path.join(client.profile, "updates")), []);
+  await page.getByRole("button", { name: "다시 다운로드", exact: true }).click();
   const install = page.getByRole("button", { name: "전송 완료 후 설치" });
   await expect(install).toBeVisible({ timeout: 300000 });
   const [transaction] = await fs.readdir(path.join(client.profile, "updates"));
@@ -87,11 +106,11 @@ try {
   assert.equal(await fs.readFile(path.join(tx, "healthy.version"), "utf8"), version);
   const saved = JSON.parse(await fs.readFile(settingsFile, "utf8"));
   assert.equal(saved.sealed, identity);
-  assert.equal(saved.settings.receive, inbox);
+  assert.equal(saved.settings.receive, before.settings.receive);
   assert.ok(saved.peers.some(p => p.id === source.local.id));
   assert.equal(await fs.readFile(path.join(inbox, "transfer.txt"), "utf8"), "업데이트 전 파일");
   console.log("PASS", process.platform, assets ? "GitHub fixture" : "GitHub live", before.version, "→", version,
-    "전송 완료 후 설치, 실제 재시작, 등록·기기 ID·파일 보존");
+    "다운로드 취소·재시도, 전송 완료 후 설치, 실제 재시작, 등록·기기 ID·파일 보존");
 } finally {
   if (updatedPid) {
     try { process.kill(updatedPid); } catch (e) { if (e.code !== "ESRCH") throw e; }

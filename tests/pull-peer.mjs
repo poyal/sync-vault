@@ -11,7 +11,7 @@ import { createInterface } from "node:readline";
 import { sampleTree } from "./process-sample.mjs";
 import { closeApp } from "./quit.mjs";
 
-const home = await fs.mkdtemp(path.join(os.tmpdir(), "sv-pull-")),
+const home = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), "sv-pull-")),
   station = "SyncVaultQA-" + randomUUID();
 const mac = process.platform === "darwin",
   exe = process.env.SYNC_VAULT_QA_EXE;

@@ -10,7 +10,7 @@ import path from "node:path";
 import net from "node:net";
 import { closeApp } from "./quit.mjs";
 
-const home = await fs.mkdtemp(path.join(os.tmpdir(), "sync-vault-tray-"));
+const home = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), "sync-vault-tray-"));
 const executable = process.env.SYNC_VAULT_QA_EXE || createRequire(import.meta.url)("electron");
 const args = [...(process.env.SYNC_VAULT_QA_EXE ? [] : ["."]), "--user-data-dir=" + home];
 if (process.platform === "darwin") args.push("--use-mock-keychain");

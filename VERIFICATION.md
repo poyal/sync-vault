@@ -1,6 +1,6 @@
 # Sync Vault 검증 기록
 
-[트레이 상주 개발 후보 검증 결과](docs/verification/tray-2026-11-27.md) · [E2E 실행 절차](docs/e2e.md) · [성능 기준](docs/performance.md)
+[0.2.1 릴리즈 검증 결과](docs/verification/release-0.2.1.md) · [트레이 상주 개발 후보 검증 결과](docs/verification/tray-2026-11-27.md) · [E2E 실행 절차](docs/e2e.md) · [성능 기준](docs/performance.md)
 
 ## 2026-11-27 · GitHub 정식 업데이트
 

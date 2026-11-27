@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import os from "node:os";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const home = await fs.mkdtemp(path.join(os.tmpdir(), "sync-vault-desktop-"));
+const home = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), "sync-vault-desktop-"));
 const executable = process.env.SYNC_VAULT_QA_EXE || require("electron");
 const shots = path.resolve("artifacts", "desktop");
 await fs.mkdir(shots, { recursive: true });
