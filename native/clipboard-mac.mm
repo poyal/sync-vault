@@ -47,7 +47,11 @@ int main(int argc,char** argv){ @autoreleasepool {
             if(!png.length||![item setData:png forType:NSPasteboardTypePNG])return 5;
         }else if([obj[@"text"] isKindOfClass:NSString.class]){
             [item setString:obj[@"text"] forType:NSPasteboardTypeString];
-            if([obj[@"html"] isKindOfClass:NSString.class])[item setData:[obj[@"html"] dataUsingEncoding:NSUTF8StringEncoding] forType:NSPasteboardTypeHTML];
+            if([obj[@"html"] isKindOfClass:NSString.class]){
+                // AppKit's HTML importer needs an explicit encoding for HTML fragments.
+                NSString *html=[@"<meta charset=\"utf-8\">" stringByAppendingString:obj[@"html"]];
+                [item setData:[html dataUsingEncoding:NSUTF8StringEncoding] forType:NSPasteboardTypeHTML];
+            }
         }else return 5;
         [item setString:@"1" forType:@"io.syncvault.remote"];
         [pb prepareForNewContentsWithOptions:NSPasteboardContentsCurrentHostOnly];

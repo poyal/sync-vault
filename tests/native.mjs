@@ -4,10 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import assert from "node:assert/strict";
 import os from "node:os";
-const tool = path.resolve(
-  "out/native",
-  process.platform === "win32" ? "clipboard.exe" : "clipboard",
-);
+const tool = path.resolve(process.argv[2] || path.join("out/native", process.platform === "win32" ? "clipboard.exe" : "clipboard"));
 const env = {
   ...process.env,
   SYNC_VAULT_QA_STATION: "SyncVaultQA-" + randomUUID(),
@@ -84,8 +81,8 @@ try {
         ],
         { encoding: "utf8" },
       ).trim();
-    const text = "한글 😀";
-    const html = "<b>한글</b>";
+    const text = "Bold 한글 😀";
+    const html = "<b>Bold</b> 한글 😀";
     execFileSync(tool, ["content"], {
       ...args,
       input: JSON.stringify({ text, html }),
@@ -96,8 +93,27 @@ try {
     );
     assert.equal(
       Buffer.from(readType("public.html"), "base64").toString(),
-      html,
+      '<meta charset="utf-8">' + html,
     );
+    const paste = `function run(args) {
+      ObjC.import('AppKit');
+      $.NSApplication.sharedApplication;
+      const board = $.NSPasteboard.pasteboardWithName(args[0]);
+      const plain = $.NSTextView.alloc.initWithFrame($.NSMakeRect(0, 0, 320, 100));
+      const rich = $.NSTextView.alloc.initWithFrame($.NSMakeRect(0, 0, 320, 100));
+      rich.setRichText(true);
+      if (!plain.readSelectionFromPasteboardType(board, $.NSPasteboardTypeString) ||
+          !rich.readSelectionFromPasteboardType(board, $.NSPasteboardTypeHTML)) throw Error('paste failed');
+      const font = rich.textStorage.attributeAtIndexEffectiveRange($.NSFontAttributeName, 0, null);
+      return JSON.stringify({ plain: ObjC.unwrap(plain.string), rich: ObjC.unwrap(rich.string),
+        bold: Boolean($.NSFontManager.sharedFontManager.traitsOfFont(font) & $.NSBoldFontMask) });
+    }`;
+    const pasted = JSON.parse(execFileSync("/usr/bin/osascript",
+      ["-l", "JavaScript", "-e", paste, env.SYNC_VAULT_QA_STATION], { encoding: "utf8" }));
+    assert.equal(pasted.plain, text);
+    assert.equal(pasted.rich.trimEnd(), text);
+    assert.equal(pasted.bold, true);
+    console.log("PASS · 창 없는 AppKit 편집기에 일반 텍스트와 HTML 붙여넣기, 한글·이모지·굵기 보존");
     execFileSync(tool, ["content"], {
       ...args,
       input: JSON.stringify({ png: png.toString("base64") }),

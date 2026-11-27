@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 const win = process.platform === "win32";
 const swapScript = path.resolve(process.argv[2] || (win ? "ui/swap.ps1" : "ui/swap.sh"));
@@ -15,10 +16,12 @@ const replacement = win
   : path.join(container, "new", "Sync Vault.app");
 const profile = path.join(home, "profile");
 const transaction = path.join(profile, "updates", randomUUID());
+const restoredPID = path.join(profile, "restored.pid");
+let relaunchPending = false;
 try {
   for (const dir of [replacement, transaction])
     await fs.mkdir(dir, { recursive: true });
-  // Both test executables exit immediately. No desktop or user clipboard is opened.
+  // The replacement exits without reporting healthy. The restored app exits normally.
   if (win) {
     await fs.mkdir(target);
     for (const dir of [target, replacement])
@@ -27,12 +30,31 @@ try {
         path.join(dir, "Sync Vault.exe"),
       );
   } else {
-    const a = spawnSync(
-      "/usr/bin/osacompile",
-      ["-o", target, "-e", "return 1"],
-      { encoding: "utf8" },
-    );
-    assert.equal(a.status, 0, a.stderr);
+    const contents = path.join(target, "Contents");
+    await fs.mkdir(path.join(contents, "MacOS"), { recursive: true });
+    await fs.writeFile(path.join(contents, "Info.plist"), `<?xml version="1.0"?>
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>io.syncvault.qa.rollback</string>
+<key>CFBundleExecutable</key><string>Restored</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>LSBackgroundOnly</key><true/>
+</dict></plist>`);
+    const build = spawnSync("/usr/bin/xcrun", ["clang", "-x", "c", "-", "-o", path.join(contents, "MacOS/Restored")], {
+      encoding: "utf8",
+      input: `#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+int main(int argc, char **argv) {
+  const char *prefix = "--user-data-dir=";
+  if (argc != 2 || strncmp(argv[1], prefix, strlen(prefix)) || chdir(argv[1] + strlen(prefix))) return 2;
+  FILE *marker = fopen("restored.pid", "wx");
+  if (!marker) return 3;
+  if (fprintf(marker, "%ld", (long)getpid()) < 0) return 4;
+  return fclose(marker) != 0;
+}\n`,
+    });
+    assert.equal(build.status, 0, build.stderr);
     const macOS = path.join(replacement, "Contents", "MacOS");
     await fs.mkdir(macOS, { recursive: true });
     await fs.writeFile(path.join(macOS, "Sync Vault"), "#!/bin/sh\nexit 1\n", {
@@ -50,6 +72,7 @@ try {
   );
   const ticket = randomUUID();
   await fs.writeFile(path.join(transaction, "commit"), ticket);
+  relaunchPending = !win;
   const r = win
     ? spawnSync(
         "powershell.exe",
@@ -103,9 +126,34 @@ try {
       .setting,
     "original",
   );
+  if (!win) {
+    // LaunchServices open returns before the restored executable has started.
+    const deadline = Date.now() + 20000;
+    let pid;
+    while (Date.now() < deadline) {
+      if (!pid) {
+        const marker = await fs.readFile(restoredPID, "utf8").catch(error => {
+          if (error.code !== "ENOENT") throw error;
+          return "";
+        });
+        if (/^[1-9]\d*$/.test(marker)) pid = Number(marker);
+      }
+      if (pid) {
+        try { process.kill(pid, 0); } catch (error) {
+          if (error.code !== "ESRCH") throw error;
+          relaunchPending = false;
+          break;
+        }
+      }
+      await delay(100);
+    }
+    assert.ok(!relaunchPending, "복원된 앱의 기동과 정상 종료를 확인할 수 없습니다.");
+    console.log("PASS · LaunchServices로 복원한 앱의 실행과 종료 확인");
+  }
   console.log("PASS · 시작 실패 시 이전 프로그램과 설정 복원");
 } finally {
-  await fs.rm(home, {
+  if (relaunchPending) console.error("실행 중일 수 있는 복원 시험 앱을 보존했습니다.", home);
+  else await fs.rm(home, {
     recursive: true,
     force: true,
     maxRetries: 5,
