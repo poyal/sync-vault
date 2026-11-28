@@ -26,6 +26,7 @@ import { Updater, compare, verifyManifest, showUpdatedWindow } from "../src/upda
 import { latestRelease } from "../src/github-release";
 import { checkedPng, cleanHTML } from "../src/content";
 import { newer } from "../src/types";
+import { ReturnChannel, ReturnChannelInterrupted } from "../src/return-channel";
 const tmp = async (t: any) => {
   const p = await fs.mkdtemp(path.join(os.tmpdir(), "sv-qa-"));
   t.after(() => fs.rm(p, { recursive: true, force: true }));
@@ -97,6 +98,22 @@ test("a TLS protocol error retries once before the handshake, with the same auth
     assert.equal(calls, expected);
   }
   assert.equal(delivered, 1);
+});
+test("return-channel timeouts and disconnects are distinct from a rejected peer request", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const channel = new ReturnChannel();
+  const send = () => channel.request("peer", "/vault/part", {}, new AbortController().signal);
+  const undelivered = send();
+  t.mock.timers.tick(8000);
+  await assert.rejects(undelivered, ReturnChannelInterrupted);
+  const disconnected = send();
+  channel.forget("peer");
+  await assert.rejects(disconnected, ReturnChannelInterrupted);
+  const rejected = send();
+  const { request } = await channel.poll("peer");
+  channel.reply("peer", { token: request!.token, ok: false });
+  await assert.rejects(rejected, (error: Error) =>
+    error instanceof Error && !(error instanceof ReturnChannelInterrupted));
 });
 test("state survives restart, corruption uses the last complete backup", async (t) => {
   const root = await tmp(t);

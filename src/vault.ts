@@ -7,6 +7,7 @@ import type { History } from "./history";
 import type { Shelf } from "./shelf";
 import type { Store } from "./store";
 import type { Pull, Entry } from "./types";
+import { ReturnChannelInterrupted } from "./return-channel";
 import type { Clips } from "./clipboard";
 import { inside } from "./shelf";
 
@@ -282,6 +283,7 @@ export class Vault {
           if (p.state === "취소") return;
           const transient =
             ctl.signal.aborted ||
+            e instanceof ReturnChannelInterrupted ||
             /ECONN|ETIMEDOUT|EPIPE|ENET|시간 초과|오프라인|잠겼|공유 상태가 변경|전송을 다시 준비|socket/i.test(
               msg(e),
             );

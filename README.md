@@ -6,7 +6,7 @@ Windows 11 x64와 Apple Silicon Mac 사이에서 클립보드와 파일을 공�
 
 ## 설치 파일
 
-Windows 11 x64는 `SyncVault-0.2.2-win-x64.exe`, Apple Silicon Mac은 `SyncVault-0.2.2-mac-arm64.dmg`를 설치합니다. 0.1.1 사용자는 새 설치본으로 한 번 교체하면 이후 버전부터 앱에서 업데이트할 수 있습니다. [v0.2.2 설치 파일](https://github.com/poyal/sync-vault/releases/tag/v0.2.2)
+Windows 11 x64는 `SyncVault-0.2.3-win-x64.exe`, Apple Silicon Mac은 `SyncVault-0.2.3-mac-arm64.dmg`를 설치합니다. 0.1.1 사용자는 새 설치본으로 한 번 교체하면 이후 버전부터 앱에서 업데이트할 수 있습니다. [v0.2.3 설치 파일](https://github.com/poyal/sync-vault/releases/tag/v0.2.3)
 
 원격 Mac에서는 `~/Workspace/personal/` 아래에서만 작업합니다. 결과를 로컬로 회수하고 원격에는 해당 경로 안의 Git 체크아웃만 보관합니다.
 

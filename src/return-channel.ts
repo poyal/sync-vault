@@ -23,6 +23,8 @@ type Item = {
   resolve: (v: any) => void;
   reject: (e: Error) => void;
 };
+export class ReturnChannelInterrupted extends Error {}
+
 export class ReturnChannel {
   private jobs = new Map<string, Item>();
   private live = new Map<string, number>();
@@ -51,7 +53,7 @@ export class ReturnChannel {
       };
       const abort = () => {
         done();
-        reject(Error("기기 연결이 중단되었습니다."));
+        reject(new ReturnChannelInterrupted("기기 연결이 중단되었습니다."));
       };
       const timer = setTimeout(abort, 90000);
       const deliveryTimer = setTimeout(() => {
@@ -132,6 +134,6 @@ export class ReturnChannel {
     this.live.delete(peer);
     this.waiters.get(peer)?.();
     for (const job of this.jobs.values())
-      if (job.peer === peer) job.reject(Error("연결이 종료되었습니다."));
+      if (job.peer === peer) job.reject(new ReturnChannelInterrupted("연결이 종료되었습니다."));
   }
 }
