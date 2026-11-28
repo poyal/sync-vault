@@ -28,7 +28,7 @@ import { checkedPng, cleanHTML } from "../src/content";
 import { newer } from "../src/types";
 import { ReturnChannel, ReturnChannelInterrupted } from "../src/return-channel";
 const tmp = async (t: any) => {
-  const p = await fs.mkdtemp(path.join(os.tmpdir(), "sv-qa-"));
+  const p = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), "sv-qa-"));
   t.after(() => fs.rm(p, { recursive: true, force: true }));
   return p;
 };
