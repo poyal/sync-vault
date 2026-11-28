@@ -28,25 +28,37 @@ async function bytes(body: ReadableStream<Uint8Array>, limit: number) {
 export async function latestRelease(signal: AbortSignal) {
   const res = await fetch(latest, {
     headers: { Accept: "application/vnd.github+json" },
+    credentials: "omit",
     redirect: "error",
     signal,
   });
   if (res.status === 404) throw Error("공개된 GitHub 정식 릴리즈를 찾을 수 없습니다.");
+  if (res.status === 403 || res.status === 429)
+    throw Error("GitHub 요청이 제한되었습니다. 잠시 후 다시 확인하세요. (HTTP " + res.status + ")");
   if (!res.ok || !res.body) throw Error("GitHub 릴리즈 조회 실패 · HTTP " + res.status);
   const raw = JSON.parse((await bytes(res.body, 1024 * 1024)).toString("utf8"));
   const parsed = releaseSchema.safeParse(raw);
   if (!parsed.success) throw Error("GitHub 정식 릴리즈 형식이 올바르지 않습니다.");
   const { tag_name, assets } = parsed.data;
+  const version = tag_name.replace(/^v/, "");
+  function findAsset(name: string, size?: number) {
+    const url = releasesPage + "/download/" + tag_name + "/" + name;
+    return assets.some(a => a.name === name && a.state === "uploaded" && a.size > 0 &&
+      a.browser_download_url === url && (size === undefined || a.size === size)) ? url : "";
+  }
   return {
-    version: tag_name.replace(/^v/, ""),
+    version,
+    page: releasesPage + "/tag/" + tag_name,
+    has: (name: string) => assets.some(a => a.name === name),
+    installer(platform: string) {
+      const prefix = "SyncVault-" + version;
+      if (platform === "win32-x64") return findAsset(prefix + "-win-x64.exe");
+      if (platform === "darwin-arm64") return findAsset(prefix + "-mac-arm64.dmg");
+      return "";
+    },
     asset(name: string, size?: number) {
-      const url = releasesPage + "/download/" + tag_name + "/" + name;
-      const found = assets.find(a =>
-        a.name === name && a.state === "uploaded" &&
-        a.size > 0 && a.browser_download_url === url
-      );
-      if (!found || (size !== undefined && found.size !== size))
-        throw Error("GitHub 릴리즈 파일을 확인하세요 · " + name);
+      const url = findAsset(name, size);
+      if (!url) throw Error("GitHub 릴리즈 파일을 확인하세요 · " + name);
       return url;
     },
   };
@@ -56,7 +68,7 @@ export async function assetStream(url: string, signal: AbortSignal) {
   // Only the release URL constructed above may initiate a download.
   let next = new URL(url);
   for (let hop = 0; hop < 4; hop++) {
-    const res = await fetch(next, { redirect: "manual", signal });
+    const res = await fetch(next, { redirect: "manual", credentials: "omit", signal });
     if (res.ok && res.body) return res.body;
     await res.body?.cancel();
     const location = res.headers.get("location");

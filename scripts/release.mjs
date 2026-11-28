@@ -5,6 +5,7 @@ import {
   createPrivateKey,
   createPublicKey,
   sign,
+  verify,
   createHash,
 } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -60,9 +61,31 @@ if (op === "init") {
         format: "der",
         type: "pkcs8",
       });
-  if (!createPublicKey(key).equals(createPublicKey(fs.readFileSync(pub))))
+  const publicKey = createPublicKey(fs.readFileSync(pub));
+  if (!createPublicKey(key).equals(publicKey))
     throw Error("공개키가 일치하지 않습니다.");
-  const platforms = {};
+  const previousManifest = path.join(target, "update.json");
+  const previousSignature = path.join(target, "update.sig");
+  let platforms = {};
+  let notes = process.env.SYNC_VAULT_RELEASE_NOTES ?? "";
+  if (fs.existsSync(previousManifest) || fs.existsSync(previousSignature)) {
+    const bytes = fs.readFileSync(previousManifest);
+    if (!verify(null, bytes, publicKey, fs.readFileSync(previousSignature)))
+      throw Error("기존 통합 목록의 서명이 일치하지 않습니다.");
+    const previous = JSON.parse(bytes);
+    if (previous.format !== "sync-vault-update-v1" || previous.version !== version)
+      throw Error("다른 릴리즈의 배포 폴더입니다.");
+    platforms = previous.platforms;
+    notes = process.env.SYNC_VAULT_RELEASE_NOTES ?? previous.notes;
+  }
+  function writeManifest(stem, entries) {
+    const bytes = Buffer.from(JSON.stringify({ format: "sync-vault-update-v1", version, notes, platforms: entries }));
+    for (const [ext, contents] of [["sig", sign(null, bytes, key)], ["json", bytes]]) {
+      const file = path.join(target, stem + "." + ext);
+      fs.writeFileSync(file + ".tmp", contents);
+      fs.renameSync(file + ".tmp", file);
+    }
+  }
   for (const file of archives) {
     const name = path.basename(file),
       platform = name.endsWith("-win32-x64.zip")
@@ -81,20 +104,7 @@ if (op === "init") {
       size: fs.statSync(out).size,
       sha256: h.digest("hex"),
     };
+    writeManifest("update-" + platform, { [platform]: platforms[platform] });
   }
-  const data = Buffer.from(
-    JSON.stringify({
-      format: "sync-vault-update-v1",
-      version,
-      notes: process.env.SYNC_VAULT_RELEASE_NOTES || "",
-      platforms,
-    }),
-  );
-  for (const [name, bytes] of [
-    ["update.sig", sign(null, data, key)],
-    ["update.json", data],
-  ]) {
-    fs.writeFileSync(path.join(target, name + ".tmp"), bytes);
-    fs.renameSync(path.join(target, name + ".tmp"), path.join(target, name));
-  }
+  writeManifest("update", platforms);
 } else throw Error("init 또는 publish를 선택하세요.");

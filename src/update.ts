@@ -7,6 +7,7 @@ import { Readable, Transform } from "node:stream";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
+import type { BrowserWindow } from "electron";
 import { assetBytes, assetStream, latestRelease } from "./github-release";
 const run = promisify(execFile);
 const ver = z
@@ -42,12 +43,26 @@ export function compare(a: string, b: string) {
     y = ver.parse(b).split(".").map(Number);
   return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
 }
+export function showUpdatedWindow(
+  window: Pick<BrowserWindow, "showInactive" | "focus" | "isFocused" | "once" | "flashFrame">,
+  elapsedMs: number,
+  idleSeconds: number,
+) {
+  window.showInactive();
+  if (elapsedMs >= 0 && idleSeconds * 1000 >= elapsedMs) window.focus();
+  if (!window.isFocused()) {
+    window.once("focus", () => window.flashFrame(false));
+    window.flashFrame(true);
+  }
+}
 export class Updater {
   status = "대기";
   notes = "";
   next = "";
   percent = 0;
   ready = false;
+  releasePage = "";
+  installerUrl = "";
   private target?: z.infer<typeof asset>;
   private dir = "";
   private ctrl?: AbortController;
@@ -61,13 +76,13 @@ export class Updater {
   ) {}
   async check() {
     if (this.ctrl || this.ready) return;
-    if (!this.key) {
-      this.status =
-        "서명 공개키 미설정 · 새 EXE 또는 DMG로 개별 업데이트하세요.";
-      this.changed();
-      return;
-    }
     this.ctrl = new AbortController();
+    this.target = undefined;
+    this.downloadUrl = "";
+    this.releasePage = "";
+    this.installerUrl = "";
+    this.next = "";
+    this.notes = "";
     this.status = "버전 확인 중";
     this.changed();
     try {
@@ -76,36 +91,48 @@ export class Updater {
         AbortSignal.timeout(15000),
       ]);
 
-      this.target = undefined;
-      this.downloadUrl = "";
-      this.next = "";
-      this.notes = "";
       const release = await latestRelease(signal);
       this.next = release.version;
-      if (compare(release.version, this.current) <= 0) {
-        this.status = "최신 버전입니다.";
+      const comparison = compare(release.version, this.current);
+      if (comparison <= 0) {
+        this.status = comparison === 0 ? "최신 버전입니다." : "현재 설치 버전이 최신 공개 버전보다 높습니다.";
         return;
       }
+      const platform = process.platform + "-" + process.arch;
+      const archive = "SyncVault-" + release.version + "-" + platform + ".zip";
+      this.releasePage = release.page;
+      const scoped = "update-" + platform;
+      const stem = release.has(scoped + ".json") || release.has(scoped + ".sig") ? scoped : "update";
+      const manualUpdate = () => {
+        this.installerUrl = release.installer(platform);
+        this.status = this.installerUrl ? "새 버전의 설치 파일을 다운로드할 수 있습니다." : "이 OS의 업데이트가 아직 없습니다.";
+      };
+      if (!this.key || !release.has(archive) || (!release.has(stem + ".json") && !release.has(stem + ".sig"))) {
+        manualUpdate();
+        return;
+      }
+      const manifestUrl = release.asset(stem + ".json");
+      const signatureUrl = release.asset(stem + ".sig", 64);
       const [manifest, signature] = await Promise.all([
-        assetBytes(release.asset("update.json"), 65536, signal),
-        assetBytes(release.asset("update.sig", 64), 64, signal),
+        assetBytes(manifestUrl, 65536, signal),
+        assetBytes(signatureUrl, 64, signal),
       ]);
       const signed = verifyManifest(manifest, signature, this.key);
       if (signed.version !== release.version) throw Error("GitHub 태그와 서명된 버전이 다릅니다.");
       this.notes = signed.notes;
-      const platform = process.platform + "-" + process.arch;
       const target = signed.platforms[platform];
-      if (target) {
-        if (target.name !== "SyncVault-" + release.version + "-" + platform + ".zip")
-          throw Error("대상 패키지 이름이 다릅니다.");
-        this.downloadUrl = release.asset(target.name, target.size);
-        this.target = target;
+      if (!target) {
+        manualUpdate();
+        return;
       }
-      this.status = this.target
-        ? "다운로드 가능"
-        : "이 OS의 업데이트가 아직 없습니다.";
+      if (target.name !== archive) throw Error("대상 패키지 이름이 다릅니다.");
+      this.downloadUrl = release.asset(archive, target.size);
+      this.target = target;
+      this.status = "다운로드 가능";
     } catch (e) {
-      this.status = "확인 실패 · " + (e as Error).message;
+      const error = e as Error;
+      this.status = "확인 실패 · " + (error.name === "TimeoutError" ? "응답 시간이 초과되었습니다. 다시 확인하세요."
+        : error.message === "fetch failed" ? "인터넷 연결을 확인하고 다시 시도하세요." : error.message);
       this.target = undefined;
     } finally {
       this.ctrl = undefined;
@@ -129,7 +156,7 @@ export class Updater {
       const hash = createHash("sha256");
       let bytes = 0;
       const self = this;
-      const signal = this.ctrl.signal;
+      const signal = AbortSignal.any([this.ctrl.signal, AbortSignal.timeout(15 * 60_000)]);
       const source = Readable.from(await assetStream(this.downloadUrl, signal));
       const measure = new Transform({
         transform(b, _e, cb) {
@@ -151,7 +178,7 @@ export class Updater {
           flags: "wx",
           mode: 0o600,
         }),
-        { signal: this.ctrl.signal },
+        { signal },
       );
       if (bytes !== a.size || hash.digest("hex") !== a.sha256)
         throw Error("설치 파일 무결성 검사 실패");

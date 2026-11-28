@@ -16,6 +16,7 @@ export const settingsSchema = z
     files: z.boolean(),
     login: z.boolean(),
     updates: z.boolean(),
+    updateCheckIntervalHours: z.number().int().min(1).max(24).default(24),
     smallBytes: z
       .number()
       .int()
@@ -36,6 +37,7 @@ export function defaults(downloads: string): Settings {
     files: true,
     login: false,
     updates: !development,
+    updateCheckIntervalHours: 1,
     smallBytes: 32 * 1024 ** 2,
     smallCount: 100,
     historyLimit: 10,
@@ -84,6 +86,7 @@ export class Store {
         // Older profiles may still name a LAN distribution folder.
         if (data.settings) delete data.settings.releaseFolder;
         data.settings = settingsSchema.parse(data.settings);
+        data.updateCheck ??= 0;
         data.pulls ??= [];
         if (!data.vaultVersion) {
           data.settings.paused = true;

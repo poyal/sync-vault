@@ -27,7 +27,10 @@ try {
   const settingsFile = path.join(client.profile, "state.json");
   const identity = JSON.parse(await fs.readFile(settingsFile, "utf8")).sealed;
   if (assets) {
-    const names = ["update.json", "update.sig", "SyncVault-" + version + "-" + process.platform + "-" + process.arch + ".zip"];
+    const scoped = "update-" + process.platform + "-" + process.arch;
+    const metadata = ["update.json", "update.sig", scoped + ".json", scoped + ".sig"];
+    const names = (await fs.readdir(assets)).filter(name => metadata.includes(name));
+    names.push("SyncVault-" + version + "-" + process.platform + "-" + process.arch + ".zip");
     const files = await Promise.all(names.map(async name => {
       const file = path.resolve(assets, name);
       return { name, file, size: (await fs.stat(file)).size };

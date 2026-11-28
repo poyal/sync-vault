@@ -172,14 +172,18 @@
         <div id="update">
           <p id="dev-update" hidden>새 개발 설치본으로 갱신하세요.</p>
           <div id="stable-update" hidden>
-            <label><input id="auto-update" type="checkbox" />하루 한 번 새 버전 확인</label>
+            <label><input id="auto-update" type="checkbox" />새 버전 자동 확인</label>
+            <label>자동 확인 간격 <select id="update-interval"></select></label>
             <small id="update-checked"></small>
             <p id="update-status" role="status"></p>
             <p id="update-notes" hidden></p>
+            <p id="manual-install" hidden></p>
             <progress id="update-progress" aria-label="업데이트 다운로드 진행률" max="100" hidden></progress>
             <div class="tools">
               <button data-action="check">지금 확인</button>
               <button data-action="download" class="primary" hidden>다운로드</button>
+              <button data-action="open-releases" data-value="installer" class="primary" hidden>설치 파일 다운로드</button>
+              <button data-action="open-releases" data-value="notes" hidden>변경 내역 보기</button>
               <button data-action="cancel-update" hidden>다운로드 취소</button>
               <button data-action="update-later" hidden>전송 완료 후 설치</button>
               <button data-action="update-now" class="primary" hidden>지금 재시작</button>

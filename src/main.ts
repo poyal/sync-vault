@@ -22,7 +22,7 @@ import { readJSON } from "./network";
 import { Clips } from "./clipboard";
 import { Receiver } from "./files";
 import { releasesPage } from "./github-release";
-import { Updater } from "./update";
+import { Updater, showUpdatedWindow } from "./update";
 import { History } from "./history";
 import { Shelf, inside } from "./shelf";
 import { Vault } from "./vault";
@@ -252,6 +252,8 @@ function status() {
       notes: up.notes,
       percent: up.percent,
       ready: up.ready,
+      hasReleasePage: !!up.releasePage,
+      hasInstaller: !!up.installerUrl,
       later: updateLater,
     },
   };
@@ -448,7 +450,7 @@ async function initialize() {
   });
   clips.locked = powerMonitor.getSystemIdleState(1) === "locked";
   lan.locked = clips.locked;
-  up = new Updater(home, app.getVersion(), key, change);
+  up = new Updater(home, app.getVersion(), app.isPackaged ? key : "", change);
   win = new BrowserWindow({
     width: 1060,
     height: 735,
@@ -493,7 +495,19 @@ async function initialize() {
     process.argv.includes(loginFlag) ||
     (process.platform === "darwin" &&
       app.getLoginItemSettings().wasOpenedAtLogin);
-  if (openRequested || !loginStart) win.show();
+  const dir = process.env.SYNC_VAULT_HEALTH, token = process.env.SYNC_VAULT_TICKET;
+  const updateStartup = dir && token && path.dirname(path.resolve(dir)) === path.join(home, "updates") &&
+    /^[a-f0-9-]{36}$/.test(token);
+  if (openRequested || !loginStart) {
+    let startedAt: number | undefined;
+    if (process.platform === "win32" && updateStartup) {
+      const commit = path.join(dir, "commit");
+      if (await fs.readFile(commit, "utf8").catch(() => "") === token)
+        startedAt = (await fs.stat(commit).catch(() => undefined))?.mtimeMs;
+    }
+    if (startedAt === undefined) win.show();
+    else showUpdatedWindow(win, Date.now() - startedAt, powerMonitor.getSystemIdleTime());
+  }
   win.setIcon(ico);
   tray.setToolTip(product);
   trayMenu();
@@ -502,15 +516,8 @@ async function initialize() {
   lan.start();
   await clips.start().catch((e) => note(msg(e)));
   schedule = setInterval(() => void pump(), 1000);
-  autoCheckUpdate();
-  const dir = process.env.SYNC_VAULT_HEALTH,
-    token = process.env.SYNC_VAULT_TICKET;
-  if (
-    dir &&
-    token &&
-    path.dirname(path.resolve(dir)) === path.join(home, "updates") &&
-    /^[a-f0-9-]{36}$/.test(token)
-  ) {
+  autoCheckUpdate(true);
+  if (updateStartup) {
     await fs.writeFile(path.join(dir, "healthy.pid"), String(process.pid), {
       mode: 0o600,
     });
@@ -521,14 +528,20 @@ async function initialize() {
   }
   change();
 }
+let checking: Promise<void> | undefined;
 function checkUpdate() {
+  if (checking) return checking;
   if (development || up.busy || up.ready) return;
-  store.state.updateCheck = Date.now();
-  persist();
-  return up.check();
+  checking = up.check().finally(() => {
+    checking = undefined;
+    store.state.updateCheck = Date.now();
+    persist();
+  });
+  return checking;
 }
-function autoCheckUpdate() {
-  if (store.state.settings.updates && Date.now() - store.state.updateCheck >= 86400000)
+function autoCheckUpdate(startup = false) {
+  const { updates, updateCheckIntervalHours } = store.state.settings;
+  if (app.isPackaged && updates && (startup || Date.now() - store.state.updateCheck >= updateCheckIntervalHours * 3600000))
     void checkUpdate();
 }
 function trayMenu() {
@@ -799,7 +812,12 @@ async function command(action: string, v: any): Promise<any> {
     app.quit();
     return;
   }
-  if (action === "open-releases") return shell.openExternal(releasesPage);
+  if (action === "open-releases") {
+    if (!v) return shell.openExternal(releasesPage);
+    const url = v === "installer" ? up.installerUrl : v === "notes" ? up.releasePage : "";
+    if (!url || development) throw Error("업데이트를 먼저 확인하세요.");
+    return shell.openExternal(url);
+  }
   if (action === "check") return checkUpdate();
   if (action === "download") return up.download();
   if (action === "cancel-update") return up.cancel();

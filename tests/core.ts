@@ -6,6 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import https from "node:https";
+import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { generateKeyPairSync, randomUUID, sign, createHash } from "node:crypto";
 import { createIdentity, fingerprint } from "../src/identity";
@@ -21,7 +22,8 @@ import {
   digest,
   validateOffer,
 } from "../src/files";
-import { Updater, compare } from "../src/update";
+import { Updater, compare, verifyManifest, showUpdatedWindow } from "../src/update";
+import { latestRelease } from "../src/github-release";
 import { checkedPng, cleanHTML } from "../src/content";
 import { newer } from "../src/types";
 const tmp = async (t: any) => {
@@ -197,14 +199,19 @@ test("automatic file receipt enforces exact 32 MiB and 100-file boundaries befor
 test("older profiles discard the distribution folder and preserve preferences", async (t) => {
   const home = await tmp(t);
   const profile = new Store(home, home);
+  assert.equal(profile.state.settings.updateCheckIntervalHours, 1);
   profile.state.settings.name = "기존 기기";
   profile.save();
   const file = path.join(home, "state.json");
   const legacy = JSON.parse(await fs.readFile(file, "utf8"));
+  delete legacy.settings.updateCheckIntervalHours;
+  legacy.settings.updates = false;
   legacy.settings.releaseFolder = "old-feed";
   await fs.writeFile(file, JSON.stringify(legacy));
   const migrated = new Store(home, home);
   assert.equal(migrated.state.settings.name, "기존 기기");
+  assert.equal(migrated.state.settings.updateCheckIntervalHours, 24);
+  assert.equal(migrated.state.settings.updates, false);
   assert.equal(Object.hasOwn(migrated.state.settings, "releaseFolder"), false);
 });
 
@@ -213,6 +220,7 @@ test("GitHub stable updates verify the tag, signature, OS, size and downloaded b
   const keys = generateKeyPairSync("ed25519");
   const publicKey = keys.publicKey.export({ format: "pem", type: "spki" }).toString();
   const platform = process.platform + "-" + process.arch;
+  const scoped = "update-" + platform;
   const name = "SyncVault-0.2.0-" + platform + ".zip";
   const payload = Buffer.from("signed payload");
   const good = { name, size: payload.length, sha256: createHash("sha256").update(payload).digest("hex") };
@@ -230,8 +238,8 @@ test("GitHub stable updates verify the tag, signature, OS, size and downloaded b
     if (url === "https://api.github.com/repos/poyal/sync-vault/releases/latest")
       return Response.json(release, { status });
     const bytes = Buffer.from(JSON.stringify(manifest));
-    if (url === base + "update.json") return new Response(bytes);
-    if (url === base + "update.sig") return new Response(badSignature ? Buffer.alloc(64) : sign(null, bytes, keys.privateKey));
+    if (url === base + "update.json" || url === base + scoped + ".json") return new Response(bytes);
+    if (url === base + "update.sig" || url === base + scoped + ".sig") return new Response(badSignature ? Buffer.alloc(64) : sign(null, bytes, keys.privateKey));
     if (url === base + name) return Response.redirect(redirect, 302);
     assert.equal(url, "https://release-assets.githubusercontent.com/example");
     if (pause) {
@@ -259,11 +267,21 @@ test("GitHub stable updates verify the tag, signature, OS, size and downloaded b
   manifest.platforms = {}; await up.check(); assert.match(up.status, /이 OS/);
   manifest.platforms = { [platform]: good };
   const zip = release.assets.pop()!;
-  await up.check(); assert.match(up.status, /파일을 확인/);
+  await up.check(); assert.match(up.status, /이 OS/);
   release.assets.push({ ...zip, size: zip.size + 1 });
   await up.check(); assert.match(up.status, /파일을 확인/);
   release.assets[2] = zip;
   await up.check(); assert.equal(up.status, "다운로드 가능"); assert.equal(up.notes, "변경 내역");
+  const metadata = (name: string, size: number) => ({ name, size, state: "uploaded", browser_download_url: base + name });
+  release.assets.push(metadata(scoped + ".json", 300));
+  await up.check(); assert.match(up.status, /확인 실패/);
+  release.assets.push(metadata(scoped + ".sig", 64));
+  const since = requests.length;
+  badSignature = true;
+  await up.check(); assert.match(up.status, /서명/);
+  assert.equal(requests.slice(since).includes(base + "update.json"), false);
+  badSignature = false;
+  await up.check(); assert.equal(up.status, "다운로드 가능");
   redirect = "https://example.org/package";
   await up.download(); assert.match(up.status, /허용되지/);
   redirect = "https://release-assets.githubusercontent.com/example";
@@ -279,6 +297,71 @@ test("GitHub stable updates verify the tag, signature, OS, size and downloaded b
   pause = false; await up.download(); assert.equal(up.ready, true); assert.equal(up.percent, 100);
   const [dir] = await fs.readdir(path.join(home, "updates"));
   assert.deepEqual(await fs.readFile(path.join(home, "updates", dir, "update.zip")), payload);
+});
+test("manual updates offer only published installers for the requested OS and exact release", async (t) => {
+  const root = await tmp(t);
+  const base = "https://github.com/poyal/sync-vault/releases/download/v2.0.0/";
+  const assets = ["SyncVault-2.0.0-win-x64.exe", "SyncVault-2.0.0-mac-arm64.dmg"].map(name =>
+    ({ name, size: 200, state: "uploaded", browser_download_url: base + name }));
+  t.mock.method(globalThis, "fetch", async (input: string) => {
+    assert.equal(input, "https://api.github.com/repos/poyal/sync-vault/releases/latest");
+    return Response.json({ tag_name: "v2.0.0", draft: false, prerelease: false, assets });
+  });
+  const release = await latestRelease(new AbortController().signal);
+  assert.equal(release.installer("win32-x64"), assets[0].browser_download_url);
+  assert.equal(release.installer("darwin-arm64"), assets[1].browser_download_url);
+  assert.equal(release.installer("darwin-x64"), "");
+  const checker = new Updater(root, "0.2.1", "", () => {});
+  await checker.check();
+  assert.equal(checker.installerUrl, release.installer(process.platform + "-" + process.arch));
+  assets[0].browser_download_url = "https://example.org/setup.exe";
+  assets[1].state = "new";
+  await checker.check();
+  assert.equal(checker.installerUrl, "");
+  assert.equal(checker.releasePage, "https://github.com/poyal/sync-vault/releases/tag/v2.0.0");
+  await assert.rejects(checker.download(), /먼저 확인/);
+});
+test("release signing preserves each platform's metadata and the 0.2.1 manifest", async (t) => {
+  const root = await tmp(t);
+  const script = path.resolve("scripts/release.mjs");
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const pub = publicKey.export({ format: "pem", type: "spki" }).toString();
+  const keyFile = path.join(root, "test-key");
+  await fs.writeFile(path.join(root, "release-key.pub"), pub);
+  await fs.writeFile(keyFile, privateKey.export({ format: "pem", type: "pkcs8" }), { mode: 0o600 });
+  const manifest = async (stem: string) => verifyManifest(
+    await fs.readFile(path.join(root, "stage", stem + ".json")),
+    await fs.readFile(path.join(root, "stage", stem + ".sig")), pub);
+  const platforms = ["win32-x64", "darwin-arm64"];
+  for (const platform of platforms) {
+    const zip = "SyncVault-1.2.3-" + platform + ".zip";
+    await fs.writeFile(path.join(root, zip), platform);
+    execFileSync(process.execPath, [script, "publish", "stage", "1.2.3", zip], {
+      cwd: root, env: { ...process.env, SYNC_VAULT_SIGNING_FILE: keyFile }, windowsHide: true,
+    });
+  }
+  const common = await manifest("update");
+  for (const platform of platforms) {
+    const signed = await manifest("update-" + platform);
+    assert.deepEqual(Object.keys(signed.platforms), [platform]);
+    assert.deepEqual(signed.platforms[platform], common.platforms[platform]);
+    assert.equal(common.platforms[platform].sha256, createHash("sha256").update(platform).digest("hex"));
+  }
+});
+test("a Windows update requests focus only if the user was idle during replacement", () => {
+  for (const [idle, acceptsFocus] of [[true, true], [true, false], [false, true]] as const) {
+    let focused = false;
+    const calls: string[] = [];
+    const window = Object.assign(new EventEmitter(), {
+      showInactive: () => calls.push("show"),
+      focus: () => { calls.push("focus"); focused = acceptsFocus; },
+      isFocused: () => focused,
+      flashFrame: (on: boolean) => calls.push(on ? "flash" : "stop"),
+    });
+    showUpdatedWindow(window, 3000, idle ? 4 : 1);
+    window.emit("focus");
+    assert.deepEqual(calls, ["show", ...(idle ? ["focus"] : []), ...(focused ? [] : ["flash", "stop"])]);
+  }
 });
 test("three independent TLS identities register, communicate in all six directions, reject revoked peers", async (t) => {
   const root = await tmp(t);

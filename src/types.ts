@@ -19,6 +19,7 @@ export interface Settings {
   files: boolean;
   login: boolean;
   updates: boolean;
+  updateCheckIntervalHours: number;
   historyLimit: number;
   smallBytes: number;
   smallCount: number;

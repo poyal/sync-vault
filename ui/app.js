@@ -222,6 +222,8 @@ function render() {
     $("#stable-update").hidden = m.development;
     if (m.development) return;
     $("#auto-update").checked = m.settings.updates;
+    $("#update-interval").value = String(m.settings.updateCheckIntervalHours);
+    $("#update-interval").disabled = !m.settings.updates;
     $("#update-checked").textContent = u.checkedAt
       ? "마지막 확인 " + new Date(u.checkedAt).toLocaleString("ko-KR")
       : "아직 확인하지 않았습니다.";
@@ -242,6 +244,13 @@ function render() {
     const download = $('#update [data-action="download"]');
     download.hidden = u.status !== "다운로드 가능" && !retry;
     download.textContent = retry ? "다시 다운로드" : "다운로드";
+    $('#update [data-value="installer"]').hidden = !u.hasInstaller;
+    $('#update [data-value="notes"]').hidden = !u.hasReleasePage;
+    const manual = $("#manual-install");
+    manual.hidden = !u.hasInstaller;
+    if (u.hasInstaller) manual.textContent = m.local.os === "darwin"
+      ? "메뉴 막대에서 Sync Vault를 종료한 뒤 DMG의 앱을 응용 프로그램 폴더에 대치하세요."
+      : "트레이에서 Sync Vault를 종료한 뒤 받은 EXE를 실행하세요.";
     $('#update [data-action="cancel-update"]').hidden = !downloading;
     $('#update [data-action="update-later"]').hidden = !u.ready || u.later;
     $('#update [data-action="update-now"]').hidden = !u.ready;
@@ -324,6 +333,9 @@ $("#choose-folder").onclick = async () => {
   }
 };
 $("#auto-update").onchange = (e) => call("settings", { updates: e.target.checked });
+const interval = $("#update-interval");
+for (let hours = 1; hours <= 24; hours++) interval.add(new Option(hours + "시간마다", String(hours)));
+interval.onchange = () => call("settings", { updateCheckIntervalHours: Number(interval.value) });
 api.listen(refresh);
 api.onPrivacy((peer) => {
   if (page === "room" && (!peer || peer === roomPeer)) {

@@ -1,6 +1,6 @@
 {
   "name": "sync-vault",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "syncVaultDevVersion": "0.2.1",
   "description": "개인 LAN 클립보드 및 파일 공유",
   "author": "Sync Vault",
